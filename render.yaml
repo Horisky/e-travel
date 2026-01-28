@@ -2,10 +2,10 @@ services:
   - type: web
     name: e-travel-backend
     env: python
-    rootDir: backend
+    rootDir: .
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --app-dir backend
     autoDeploy: true
     envVars:
       - key: LLM_PROVIDER
