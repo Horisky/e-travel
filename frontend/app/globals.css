@@ -124,6 +124,7 @@ textarea {
   font-size: 0.95rem;
   font-family: "Space Grotesk", system-ui, sans-serif;
   background: #fff;
+  resize: none;
 }
 
 .inline {
