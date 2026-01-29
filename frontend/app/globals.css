@@ -92,6 +92,17 @@ body {
   gap: 28px;
 }
 
+.grid.results-active {
+  grid-template-columns: 1fr;
+}
+
+.grid.results-active .form-panel,
+.grid.results-active .result-panel {
+  max-width: 920px;
+  margin: 0 auto;
+  width: 100%;
+}
+
 .panel {
   background: var(--surface);
   border-radius: 24px;
