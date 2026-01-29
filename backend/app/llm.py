@@ -63,10 +63,8 @@ def generate_plan_with_llm(req: PlanRequest) -> PlanResponse:
                 {
                     "role": "user",
                     "content": (
-                        "Previous output failed validation:
-"
-                        f"{exc}
-"
+                        "Previous output failed validation:\\n"
+                        f"{exc}\\n"
                         "Return ONLY valid JSON that matches the schema."
                     ),
                 }
