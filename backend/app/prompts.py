@@ -9,6 +9,7 @@ You are a travel planning assistant. Follow these rules:
 USER_TEMPLATE = """
 Generate a travel plan in Chinese based on:
 - origin: {origin}
+- destination (optional): {destination}
 - start_date: {start_date}
 - days: {days}
 - travelers: {travelers}
@@ -16,6 +17,8 @@ Generate a travel plan in Chinese based on:
 - preferences: {preferences}
 - pace: {pace}
 - constraints: {constraints}
+
+If destination is provided, prioritize that city as the main destination.
 
 Output must match this JSON structure exactly (field names and types):
 {schema}

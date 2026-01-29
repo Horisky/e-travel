@@ -35,3 +35,35 @@ create table if not exists feedback (
   tags jsonb not null default '[]',
   comment text
 );
+
+-- Auth + preferences
+create table if not exists users (
+  id uuid primary key default gen_random_uuid(),
+  email text unique not null,
+  password_hash text not null,
+  password_salt text not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists auth_codes (
+  id uuid primary key default gen_random_uuid(),
+  email text not null,
+  code_hash text not null,
+  code_salt text not null,
+  purpose text not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+
+create table if not exists user_preferences (
+  user_id uuid primary key references users(id) on delete cascade,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists user_plans (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  data jsonb not null,
+  created_at timestamptz not null default now()
+);

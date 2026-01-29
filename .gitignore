@@ -3,5 +3,6 @@ __pycache__/
 .env
 .env.*
 *.log
+!.env.example
 frontend/node_modules/
 frontend/.next/

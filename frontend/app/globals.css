@@ -126,6 +126,89 @@ body {
   color: var(--accent-2);
 }
 
+.auth-panel {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: #faf6f0;
+}
+
+.auth-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.auth-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.auth-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tab {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.tab.active {
+  border-color: var(--accent-2);
+  color: var(--accent-2);
+}
+
+.auth-body {
+  display: grid;
+  gap: 12px;
+}
+
+.reset-block {
+  display: grid;
+  gap: 8px;
+}
+
+.link {
+  background: none;
+  border: none;
+  color: var(--accent-2);
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.card-click {
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-click:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(26, 26, 26, 0.12);
+}
+
+.chip.mini {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+}
+
 .panel {
   background: var(--surface);
   border-radius: 24px;

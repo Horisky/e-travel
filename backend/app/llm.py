@@ -25,6 +25,7 @@ def generate_plan_with_llm(req: PlanRequest) -> PlanResponse:
     else:
         api_base = os.getenv("LLM_API_BASE", "https://api.openai.com/v1").strip()
         model = os.getenv("LLM_MODEL", "gpt-4o-mini").strip()
+
     response_format = os.getenv("LLM_RESPONSE_FORMAT", "json_object").strip()
     timeout_seconds = int(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
     max_retries = int(os.getenv("LLM_MAX_RETRIES", "2"))
@@ -62,9 +63,11 @@ def generate_plan_with_llm(req: PlanRequest) -> PlanResponse:
                 {
                     "role": "user",
                     "content": (
-                        "上一次输出未通过校验，错误如下：\n"
-                        f"{exc}\n"
-                        "请严格只输出符合 JSON 的对象，且字段与后端约定一致。"
+                        "Previous output failed validation:
+"
+                        f"{exc}
+"
+                        "Return ONLY valid JSON that matches the schema."
                     ),
                 }
             )
@@ -76,14 +79,15 @@ def _build_user_prompt(req: PlanRequest) -> str:
     budget = req.budget_text or _budget_range(req)
     schema = json.dumps(PlanResponse.model_json_schema(), ensure_ascii=True)
     return USER_TEMPLATE.format(
-        origin=req.origin or "未指定",
+        origin=req.origin or "???",
+        destination=req.destination or "???",
         start_date=req.start_date,
         days=req.days,
         travelers=req.travelers,
         budget=budget,
-        preferences="、".join(req.preferences) or "无",
+        preferences="?".join(req.preferences) or "?",
         pace=req.pace,
-        constraints="、".join(req.constraints) or "无",
+        constraints="?".join(req.constraints) or "?",
         schema=schema,
     )
 
@@ -95,7 +99,7 @@ def _budget_range(req: PlanRequest) -> str:
         return f">= {req.budget_min}"
     if req.budget_max is not None:
         return f"<= {req.budget_max}"
-    return "未指定"
+    return "???"
 
 
 def _call_openai(

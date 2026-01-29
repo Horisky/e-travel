@@ -3,6 +3,7 @@ from pydantic import BaseModel, Field
 
 class PlanRequest(BaseModel):
     origin: Optional[str] = Field(default=None, description='???')
+    destination: Optional[str] = Field(default=None, description='?????????')
     start_date: str = Field(description='?????YYYY-MM-DD')
     days: int = Field(ge=1, le=30, description='??')
     travelers: int = Field(default=1, ge=1, le=20, description='??')
@@ -45,3 +46,37 @@ class PlanResponse(BaseModel):
     daily_plan: List[DayPlan]
     budget_breakdown: BudgetBreakdown
     warnings: List[str] = Field(default_factory=list)
+
+class AuthRegisterRequest(BaseModel):
+    email: str
+    password: str
+
+class AuthLoginRequest(BaseModel):
+    email: str
+    password: str
+
+class AuthCodeRequest(BaseModel):
+    email: str
+
+class AuthCodeVerifyRequest(BaseModel):
+    email: str
+    code: str
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordConfirmRequest(BaseModel):
+    email: str
+    code: str
+    new_password: str
+
+class PreferencesRequest(BaseModel):
+    origin: Optional[str] = None
+    destination: Optional[str] = None
+    travelers: Optional[int] = None
+    budget_min: Optional[float] = None
+    budget_max: Optional[float] = None
+    budget_text: Optional[str] = None
+    preferences: List[str] = Field(default_factory=list)
+    pace: Optional[str] = None
+    constraints: List[str] = Field(default_factory=list)
