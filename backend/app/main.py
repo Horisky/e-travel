@@ -17,6 +17,7 @@ app.add_middleware(
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "https://e-travel-murex.vercel.app",
+        "https://e-travel-s5rj.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
