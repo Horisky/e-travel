@@ -29,6 +29,11 @@ body {
   min-height: 100vh;
 }
 
+.info-page {
+  min-height: 100vh;
+  padding: 64px 6vw 48px;
+}
+
 .landing-hero {
   min-height: 100vh;
   display: grid;
@@ -80,6 +85,86 @@ body {
 
 .landing-login {
   padding: 24px 0 80px;
+}
+
+.landing-about {
+  padding: 0 6vw 40px;
+}
+
+.about-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
+.about-inner h2 {
+  margin: 0 0 12px;
+}
+
+.about-inner p {
+  margin: 0 0 10px;
+  color: var(--muted);
+}
+
+.about-inner ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.landing-faq {
+  padding: 0 6vw 80px;
+}
+
+.faq-inner {
+  max-width: 720px;
+  margin: 0 auto;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
+.faq-inner h2 {
+  margin: 0 0 16px;
+}
+
+.faq-inner details {
+  border-top: 1px solid var(--border);
+  padding: 12px 0;
+}
+
+.faq-inner details:first-of-type {
+  border-top: none;
+}
+
+.faq-inner summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.faq-inner p {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.landing-footer {
+  padding: 0 6vw 40px;
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+}
+
+.landing-footer a {
+  color: var(--accent-2);
+  text-decoration: none;
+  font-weight: 600;
 }
 
 .scroll-cta:hover .arrow {
@@ -512,6 +597,24 @@ textarea {
 .footer {
   color: var(--muted);
   font-size: 0.85rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.footer-version {
+  margin-left: auto;
+  text-align: right;
+}
+
+.footer-links {
+  display: inline-flex;
+  gap: 12px;
+}
+
+.footer-links a {
+  color: var(--accent-2);
+  text-decoration: none;
 }
 
 @media (max-width: 980px) {

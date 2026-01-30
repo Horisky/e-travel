@@ -32,6 +32,10 @@ export default function Home() {
       <section ref={loginRef} className="landing-login">
         <LoginPage />
       </section>
+      <footer className="landing-footer">
+        <a href="/faq">FAQ</a>
+        <a href="/about">关于我们</a>
+      </footer>
     </div>
   );
 }

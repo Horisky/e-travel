@@ -92,7 +92,7 @@ export default function PlannerPage() {
   const logout = () => {
     localStorage.removeItem("e_travel_token");
     localStorage.removeItem("e_travel_email");
-    router.replace("/login");
+    router.replace("/");
   };
 
   const buildTopDestinations = (incoming, chosenDestination) => {
@@ -319,6 +319,11 @@ export default function PlannerPage() {
 
       <footer className="footer">
         <span>Backend: {apiBase}</span>
+        <span className="footer-links">
+          <a href="/faq">FAQ</a>
+          <a href="/about">关于我们</a>
+        </span>
+        <span className="footer-version">E-travel——AI一键生成旅行规划系统 V1.0</span>
       </footer>
     </div>
   );
