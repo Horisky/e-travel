@@ -15,7 +15,9 @@ export default function Home() {
   return (
     <div className="landing">
       <section className="landing-hero">
-        <div className="landing-art" aria-hidden="true" />
+        <div className="landing-art" aria-hidden="true">
+          <img src="/hero-transport.png" alt="" />
+        </div>
         <div className="landing-copy">
           <p className="eyebrow">AI Travel Planner</p>
           <h1>一键生成你的专属旅行计划</h1>
