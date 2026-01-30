@@ -50,6 +50,7 @@ class PlanResponse(BaseModel):
 class AuthRegisterRequest(BaseModel):
     email: str
     password: str
+    code: str
 
 class AuthLoginRequest(BaseModel):
     email: str

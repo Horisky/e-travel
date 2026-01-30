@@ -3,7 +3,11 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 import jwt
+import httpx
 from dotenv import load_dotenv
+
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -22,7 +26,24 @@ from .llm import generate_plan_with_llm
 from . import db
 
 app = FastAPI(title='Travel Planner API')
-load_dotenv()
+
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
+EMAIL_FROM = os.getenv("EMAIL_FROM", "E-Travel <no-reply@yourdomain.com>").strip()
+
+
+def send_email(to_email: str, subject: str, text: str) -> None:
+    if not RESEND_API_KEY:
+        raise RuntimeError("RESEND_API_KEY not set")
+    if not EMAIL_FROM:
+        raise RuntimeError("EMAIL_FROM not set")
+    resp = httpx.post(
+        "https://api.resend.com/emails",
+        headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
+        json={"from": EMAIL_FROM, "to": [to_email], "subject": subject, "text": text},
+        timeout=20.0,
+    )
+    if resp.status_code >= 400:
+        raise RuntimeError(f"Resend error: {resp.status_code} {resp.text}")
 
 cors_env = os.getenv("CORS_ORIGINS", "").strip()
 extra_origins = [o.strip() for o in cors_env.split(",") if o.strip()]
@@ -46,7 +67,7 @@ def create_token(user: dict) -> str:
     if not db.JWT_SECRET:
         raise RuntimeError("JWT_SECRET not set")
     exp = datetime.now(timezone.utc) + timedelta(minutes=db.JWT_EXPIRE_MINUTES)
-    payload = {"sub": user["id"], "email": user["email"], "exp": exp}
+    payload = {"sub": str(user["id"]), "email": user["email"], "exp": exp}
     return jwt.encode(payload, db.JWT_SECRET, algorithm="HS256")
 
 
@@ -71,12 +92,29 @@ def health():
 
 @app.post('/api/auth/register')
 def register(req: AuthRegisterRequest):
+    if not db.verify_code(req.email, req.code, "register"):
+        raise HTTPException(status_code=401, detail="Invalid code")
     if db.get_user_by_email(req.email):
         raise HTTPException(status_code=400, detail="Email already registered")
     db.create_user(req.email, req.password)
     user = db.get_user_by_email(req.email)
     token = create_token(user)
     return {"token": token, "email": user["email"]}
+
+
+@app.post('/api/auth/register/request')
+def register_code_request(req: AuthCodeRequest):
+    if db.get_user_by_email(req.email):
+        raise HTTPException(status_code=400, detail="Email already registered")
+    code = f"{secrets.randbelow(1000000):06d}"
+    db.store_code(req.email, code, "register")
+    send_code = os.getenv("SEND_CODE_IN_RESPONSE", "true").lower() == "true"
+    if not send_code:
+        try:
+            send_email(req.email, "E-Travel 注册验证码", f"你的注册验证码是：{code}\n10 分钟内有效。")
+        except Exception:
+            raise HTTPException(status_code=500, detail="Failed to send email")
+    return {"message": "code sent", **({"code": code} if send_code else {})}
 
 
 @app.post('/api/auth/login')
@@ -96,6 +134,11 @@ def login_code_request(req: AuthCodeRequest):
     code = f"{secrets.randbelow(1000000):06d}"
     db.store_code(req.email, code, "login")
     send_code = os.getenv("SEND_CODE_IN_RESPONSE", "true").lower() == "true"
+    if not send_code:
+        try:
+            send_email(req.email, "E-Travel 登录验证码", f"你的登录验证码是：{code}\n10 分钟内有效。")
+        except Exception:
+            raise HTTPException(status_code=500, detail="Failed to send email")
     return {"message": "code sent", **({"code": code} if send_code else {})}
 
 
@@ -116,6 +159,11 @@ def reset_password_request(req: ResetPasswordRequest):
     code = f"{secrets.randbelow(1000000):06d}"
     db.store_code(req.email, code, "reset")
     send_code = os.getenv("SEND_CODE_IN_RESPONSE", "true").lower() == "true"
+    if not send_code:
+        try:
+            send_email(req.email, "E-Travel 重置密码验证码", f"你的重置验证码是：{code}\n10 分钟内有效。")
+        except Exception:
+            raise HTTPException(status_code=500, detail="Failed to send email")
     return {"message": "code sent", **({"code": code} if send_code else {})}
 
 

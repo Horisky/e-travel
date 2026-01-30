@@ -18,7 +18,9 @@ Generate a travel plan in Chinese based on:
 - pace: {pace}
 - constraints: {constraints}
 
-If destination is provided, prioritize that city as the main destination.
+If destination is provided:
+- The daily_plan must be for that destination.
+- top_destinations must still include 3 alternative destinations and must NOT include the provided destination.
 
 Output must match this JSON structure exactly (field names and types):
 {schema}

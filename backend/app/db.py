@@ -146,7 +146,10 @@ def load_preferences(user_id: str) -> Optional[Dict[str, Any]]:
             row = cur.fetchone()
             if not row:
                 return None
-            return json.loads(row[0])
+            data = row[0]
+            if isinstance(data, (dict, list)):
+                return data
+            return json.loads(data)
 
 
 def save_plan(user_id: str, plan: Dict[str, Any]) -> None:
