@@ -25,6 +25,55 @@ body {
   font-family: "Space Grotesk", system-ui, sans-serif;
 }
 
+.landing {
+  min-height: 100vh;
+}
+
+.landing-hero {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 64px 6vw 48px;
+}
+
+.landing-copy {
+  max-width: 720px;
+}
+
+.scroll-button {
+  margin-top: 20px;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 22px;
+  background: var(--accent-2);
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 10px 24px rgba(47, 111, 108, 0.25);
+}
+
+.scroll-button:hover {
+  transform: translateY(-1px);
+}
+
+.scroll-button .arrow {
+  display: inline-block;
+  animation: bounce 1.6s infinite;
+}
+
+.landing-login {
+  padding: 24px 0 80px;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}
+
 .muted {
   color: var(--muted);
   margin: 0;
