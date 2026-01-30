@@ -43,11 +43,10 @@ body {
 }
 
 .landing-art {
-  width: min(320px, 60vw);
+  width: min(360px, 60vw);
   aspect-ratio: 1 / 1;
-  border-radius: 48% 52% 42% 58%;
-  background: radial-gradient(circle at 30% 30%, #ffe0cc 0%, #f4d5bf 55%, #ecd1c0 100%);
-  box-shadow: 0 24px 60px rgba(26, 26, 26, 0.08);
+  background: url("/transport.svg") center/contain no-repeat;
+  filter: drop-shadow(0 20px 40px rgba(26, 26, 26, 0.12));
 }
 
 .scroll-cta {
