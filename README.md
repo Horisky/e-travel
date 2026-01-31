@@ -1,7 +1,7 @@
 ﻿# 🌍 E-Travel — AI-Powered Travel Planner
 
 E-Travel is a full-stack web app that generates personalized travel itineraries with LLMs. It includes a landing intro, login/register, preference memory, and structured day-by-day plans.
-E-Travel 是一个全栈旅行规划应用，基于大模型生成个性化行程，包含首页介绍、登录/注册、偏好记忆与结构化日程。
+E-Travel 是一个全栈旅行规划应用，基于大模型生成个性化行程，包含首页介绍、登录/注册、偏好记忆与结构化日程。目前已发布V1.0版本：https://e-travel-s5rj.vercel.app/
 
 ---
 
