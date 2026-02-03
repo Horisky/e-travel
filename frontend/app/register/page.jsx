@@ -14,8 +14,19 @@ export default function RegisterPage() {
   const [confirm, setConfirm] = useState("");
   const [code, setCode] = useState("");
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState("info");
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+
+  const clearMessage = () => {
+    setMessage("");
+    setMessageType("info");
+  };
+
+  const setStatus = (text, type = "info") => {
+    setMessage(text);
+    setMessageType(type);
+  };
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -24,9 +35,9 @@ export default function RegisterPage() {
   }, [cooldown]);
 
   const requestCode = async () => {
-    setMessage("");
+    clearMessage();
     if (!email.trim()) {
-      setMessage("请填写邮箱");
+      setStatus("请填写邮箱", "error");
       return;
     }
     if (cooldown > 0) return;
@@ -39,31 +50,31 @@ export default function RegisterPage() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.detail || "发送失败");
-      setMessage(data.code ? `测试模式验证码：${data.code}` : "验证码已发送，请查看邮箱");
+      setStatus(data.code ? `测试模式验证码：${data.code}` : "验证码已发送，请查看邮箱");
       setCooldown(60);
     } catch (err) {
-      setMessage(err.message || "发送失败");
+      setStatus(err.message || "发送失败", "error");
     } finally {
       setLoading(false);
     }
   };
 
   const register = async () => {
-    setMessage("");
+    clearMessage();
     if (!email.trim()) {
-      setMessage("请填写邮箱");
+      setStatus("请填写邮箱", "error");
       return;
     }
     if (!passwordRule.test(password)) {
-      setMessage("密码需包含大写字母、小写字母、特殊符号且不少于8位");
+      setStatus("密码需包含大写字母、小写字母、特殊符号且不少于8位", "error");
       return;
     }
     if (password !== confirm) {
-      setMessage("两次输入的密码不一致");
+      setStatus("两次输入的密码不一致", "error");
       return;
     }
     if (!code.trim()) {
-      setMessage("请输入邮箱验证码");
+      setStatus("请输入邮箱验证码", "error");
       return;
     }
     setLoading(true);
@@ -79,7 +90,7 @@ export default function RegisterPage() {
       localStorage.setItem("e_travel_email", data.email || email);
       router.replace("/planner");
     } catch (err) {
-      setMessage(err.message || "注册失败");
+      setStatus(err.message || "注册失败", "error");
     } finally {
       setLoading(false);
     }
@@ -115,8 +126,7 @@ export default function RegisterPage() {
           </div>
           <button className="submit" type="button" onClick={register} disabled={loading}>注册</button>
           <button className="ghost-button" type="button" onClick={() => router.push("/")}>返回登录</button>
-          {message ? <p className="hint">{message}</p> : null}
-          <p className="hint">密码规则：至少8位，包含大写字母、小写字母、特殊符号</p>
+          {message ? <p className={messageType === "error" ? "hint error" : "hint"}>{message}</p> : null}
         </div>
       </div>
     </div>

@@ -16,8 +16,19 @@ export default function LoginPage() {
   const [newPassword, setNewPassword] = useState("");
   const [showReset, setShowReset] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState("info");
   const [loading, setLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+
+  const clearMessage = () => {
+    setMessage("");
+    setMessageType("info");
+  };
+
+  const setStatus = (text, type = "info") => {
+    setMessage(text);
+    setMessageType(type);
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("e_travel_token");
@@ -38,17 +49,17 @@ export default function LoginPage() {
 
   const ensureEmail = () => {
     if (!email.trim()) {
-      setMessage("请填写邮箱");
+      setStatus("请填写邮箱", "error");
       return false;
     }
     return true;
   };
 
   const login = async () => {
-    setMessage("");
+    clearMessage();
     if (!ensureEmail()) return;
     if (!password) {
-      setMessage("请输入密码");
+      setStatus("请输入密码", "error");
       return;
     }
     setLoading(true);
@@ -62,17 +73,17 @@ export default function LoginPage() {
       if (!resp.ok) throw new Error(data.detail || "登录失败");
       handleAuthSuccess(data);
     } catch (err) {
-      setMessage(err.message || "登录失败");
+      setStatus(err.message || "登录失败", "error");
     } finally {
       setLoading(false);
     }
   };
 
   const requestCode = async (purpose) => {
-    setMessage("");
+    clearMessage();
     if (!ensureEmail()) return;
     if (cooldown > 0) {
-      setMessage(`请稍后再试（${cooldown}s）`);
+      setStatus(`请稍后再试（${cooldown}s）`, "error");
       return;
     }
     setLoading(true);
@@ -85,20 +96,20 @@ export default function LoginPage() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.detail || "发送失败");
-      setMessage(data.code ? `测试模式验证码：${data.code}` : "验证码已发送，请查看邮箱");
+      setStatus(data.code ? `测试模式验证码：${data.code}` : "验证码已发送，请查看邮箱");
       setCooldown(60);
     } catch (err) {
-      setMessage(err.message || "发送失败");
+      setStatus(err.message || "发送失败", "error");
     } finally {
       setLoading(false);
     }
   };
 
   const verifyCodeLogin = async () => {
-    setMessage("");
+    clearMessage();
     if (!ensureEmail()) return;
     if (!code.trim()) {
-      setMessage("请输入验证码");
+      setStatus("请输入验证码", "error");
       return;
     }
     setLoading(true);
@@ -112,21 +123,21 @@ export default function LoginPage() {
       if (!resp.ok) throw new Error(data.detail || "验证码无效");
       handleAuthSuccess(data);
     } catch (err) {
-      setMessage(err.message || "验证码无效");
+      setStatus(err.message || "验证码无效", "error");
     } finally {
       setLoading(false);
     }
   };
 
   const resetPassword = async () => {
-    setMessage("");
+    clearMessage();
     if (!ensureEmail()) return;
     if (!code.trim()) {
-      setMessage("请输入验证码");
+      setStatus("请输入验证码", "error");
       return;
     }
     if (!passwordRule.test(newPassword)) {
-      setMessage("新密码需包含大写字母、小写字母、特殊符号且不少于8位");
+      setStatus("新密码需包含大写字母、小写字母、特殊符号且不少于8位", "error");
       return;
     }
     setLoading(true);
@@ -138,9 +149,9 @@ export default function LoginPage() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.detail || "重置失败");
-      setMessage("密码重置成功，请使用新密码登录");
+      setStatus("密码重置成功，请使用新密码登录");
     } catch (err) {
-      setMessage(err.message || "重置失败");
+      setStatus(err.message || "重置失败", "error");
     } finally {
       setLoading(false);
     }
@@ -208,7 +219,7 @@ export default function LoginPage() {
             </>
           )}
 
-          {message ? <p className="hint">{message}</p> : null}
+          {message ? <p className={messageType === "error" ? "hint error" : "hint"}>{message}</p> : null}
         </div>
       </div>
     </div>
