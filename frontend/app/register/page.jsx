@@ -28,6 +28,21 @@ export default function RegisterPage() {
     setMessageType(type);
   };
 
+  const toChineseMessage = (raw) => {
+    if (!raw) return raw;
+    const map = {
+      "Invalid code": "验证码无效",
+      "Email already registered": "邮箱已注册",
+      "User not found": "用户不存在",
+      "Failed to send email": "发送邮件失败",
+      "Invalid token": "登录已过期，请重新登录",
+      "Unauthorized": "请先登录",
+      "Invalid Authorization header": "登录信息无效"
+    };
+    if (raw.startsWith("Resend error")) return "邮件服务异常，请稍后再试";
+    return map[raw] || raw;
+  };
+
   useEffect(() => {
     if (cooldown <= 0) return;
     const timer = setInterval(() => setCooldown((v) => v - 1), 1000);
@@ -53,7 +68,7 @@ export default function RegisterPage() {
       setStatus(data.code ? `测试模式验证码：${data.code}` : "验证码已发送，请查看邮箱");
       setCooldown(60);
     } catch (err) {
-      setStatus(err.message || "发送失败", "error");
+      setStatus(toChineseMessage(err.message) || "发送失败", "error");
     } finally {
       setLoading(false);
     }
@@ -90,7 +105,7 @@ export default function RegisterPage() {
       localStorage.setItem("e_travel_email", data.email || email);
       router.replace("/planner");
     } catch (err) {
-      setStatus(err.message || "注册失败", "error");
+      setStatus(toChineseMessage(err.message) || "注册失败", "error");
     } finally {
       setLoading(false);
     }

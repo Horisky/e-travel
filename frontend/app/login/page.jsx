@@ -30,6 +30,22 @@ export default function LoginPage() {
     setMessageType(type);
   };
 
+  const toChineseMessage = (raw) => {
+    if (!raw) return raw;
+    const map = {
+      "Invalid credentials": "邮箱或密码错误",
+      "Invalid code": "验证码无效",
+      "Email already registered": "邮箱已注册",
+      "User not found": "用户不存在",
+      "Failed to send email": "发送邮件失败",
+      "Invalid token": "登录已过期，请重新登录",
+      "Unauthorized": "请先登录",
+      "Invalid Authorization header": "登录信息无效"
+    };
+    if (raw.startsWith("Resend error")) return "邮件服务异常，请稍后再试";
+    return map[raw] || raw;
+  };
+
   useEffect(() => {
     const token = localStorage.getItem("e_travel_token");
     if (token) router.replace("/planner");
@@ -73,7 +89,7 @@ export default function LoginPage() {
       if (!resp.ok) throw new Error(data.detail || "登录失败");
       handleAuthSuccess(data);
     } catch (err) {
-      setStatus(err.message || "登录失败", "error");
+      setStatus(toChineseMessage(err.message) || "登录失败", "error");
     } finally {
       setLoading(false);
     }
@@ -99,7 +115,7 @@ export default function LoginPage() {
       setStatus(data.code ? `测试模式验证码：${data.code}` : "验证码已发送，请查看邮箱");
       setCooldown(60);
     } catch (err) {
-      setStatus(err.message || "发送失败", "error");
+      setStatus(toChineseMessage(err.message) || "发送失败", "error");
     } finally {
       setLoading(false);
     }
@@ -123,7 +139,7 @@ export default function LoginPage() {
       if (!resp.ok) throw new Error(data.detail || "验证码无效");
       handleAuthSuccess(data);
     } catch (err) {
-      setStatus(err.message || "验证码无效", "error");
+      setStatus(toChineseMessage(err.message) || "验证码无效", "error");
     } finally {
       setLoading(false);
     }
@@ -151,7 +167,7 @@ export default function LoginPage() {
       if (!resp.ok) throw new Error(data.detail || "重置失败");
       setStatus("密码重置成功，请使用新密码登录");
     } catch (err) {
-      setStatus(err.message || "重置失败", "error");
+      setStatus(toChineseMessage(err.message) || "重置失败", "error");
     } finally {
       setLoading(false);
     }
