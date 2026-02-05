@@ -176,3 +176,69 @@ def save_plan(user_id: str, plan: Dict[str, Any]) -> None:
                 """,
                 (user_id,),
             )
+
+
+def save_search_history(user_id: str, query: Dict[str, Any], result: Dict[str, Any]) -> None:
+    pool = get_pool()
+    if pool is None:
+        return
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                insert into user_search_history (user_id, query, result)
+                values (%s, %s, %s)
+                """,
+                (
+                    user_id,
+                    json.dumps(query, ensure_ascii=False),
+                    json.dumps(result, ensure_ascii=False),
+                ),
+            )
+            cur.execute(
+                """
+                delete from user_search_history
+                where id in (
+                    select id from user_search_history
+                    where user_id=%s
+                    order by created_at desc offset 10
+                )
+                """,
+                (user_id,),
+            )
+
+
+def load_search_history(user_id: str, limit: int = 10) -> list[Dict[str, Any]]:
+    pool = get_pool()
+    if pool is None:
+        return []
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select id, query, result, created_at
+                from user_search_history
+                where user_id=%s
+                order by created_at desc
+                limit %s
+                """,
+                (user_id, limit),
+            )
+            rows = cur.fetchall() or []
+            items = []
+            for row in rows:
+                query = row[1]
+                result = row[2]
+                if isinstance(query, str):
+                    query = json.loads(query)
+                if isinstance(result, str):
+                    result = json.loads(result)
+                items.append(
+                    {
+                        "id": str(row[0]),
+                        "query": query,
+                        "result": result,
+                        "created_at": row[3].isoformat() if row[3] else None,
+                    }
+                )
+            return items

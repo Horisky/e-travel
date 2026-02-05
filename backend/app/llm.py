@@ -6,8 +6,19 @@ from typing import Any, Dict, List
 import httpx
 from pydantic import ValidationError
 
-from .prompts import SYSTEM_GUARD, USER_TEMPLATE
 from .schemas import PlanRequest, PlanResponse
+from .prompts import (
+    SYSTEM_GUARD,
+    USER_TEMPLATE,
+    PLANNER_SYSTEM,
+    PLANNER_USER,
+    BUDGET_SYSTEM,
+    BUDGET_USER,
+    RISK_SYSTEM,
+    RISK_USER,
+    INTEGRATOR_SYSTEM,
+    INTEGRATOR_USER,
+)
 
 
 def generate_plan_with_llm(req: PlanRequest) -> PlanResponse:
@@ -29,48 +40,116 @@ def generate_plan_with_llm(req: PlanRequest) -> PlanResponse:
     response_format = os.getenv("LLM_RESPONSE_FORMAT", "json_object").strip()
     timeout_seconds = int(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
     max_retries = int(os.getenv("LLM_MAX_RETRIES", "2"))
+    audit_enabled = os.getenv("AGENT_AUDIT_LOG", "false").lower() == "true"
 
-    messages = [
-        {"role": "system", "content": SYSTEM_GUARD},
-        {"role": "user", "content": _build_user_prompt(req)},
-    ]
+    budget = req.budget_text or _budget_range(req)
 
+    # 1) Planner
+    planner_prompt = PLANNER_USER.format(
+        origin=req.origin or "???",
+        destination=req.destination or "???",
+        start_date=req.start_date,
+        days=req.days,
+        travelers=req.travelers,
+        budget=budget,
+        preferences="?".join(req.preferences) or "?",
+        pace=req.pace,
+        constraints="?".join(req.constraints) or "?",
+    )
+
+    plan_skeleton = _run_agent_with_retry(
+        system_prompt=PLANNER_SYSTEM,
+        user_prompt=planner_prompt,
+        api_base=api_base,
+        api_key=api_key,
+        model=model,
+        response_format=response_format,
+        timeout_seconds=timeout_seconds,
+        provider=provider,
+        max_retries=max_retries,
+    )
+
+    if audit_enabled:
+        print("[planner_output]", json.dumps(plan_skeleton, ensure_ascii=False))#增加输出用来审计以下同理
+
+    # 2) Budget
+    budget_prompt = BUDGET_USER.format(
+        plan_skeleton=json.dumps(plan_skeleton, ensure_ascii=False),
+        budget=budget,
+        travelers=req.travelers,
+    )
+    budget_info = _run_agent_with_retry(
+        system_prompt=BUDGET_SYSTEM,
+        user_prompt=budget_prompt,
+        api_base=api_base,
+        api_key=api_key,
+        model=model,
+        response_format=response_format,
+        timeout_seconds=timeout_seconds,
+        provider=provider,
+        max_retries=max_retries,
+    )
+    if audit_enabled:
+        print("[budget_output]", json.dumps(budget_info, ensure_ascii=False))
+
+    # 3) Risk
+    risk_prompt = RISK_USER.format(
+        plan_skeleton=json.dumps(plan_skeleton, ensure_ascii=False),
+    )
+    risk_info = _run_agent_with_retry(
+        system_prompt=RISK_SYSTEM,
+        user_prompt=risk_prompt,
+        api_base=api_base,
+        api_key=api_key,
+        model=model,
+        response_format=response_format,
+        timeout_seconds=timeout_seconds,
+        provider=provider,
+        max_retries=max_retries,
+    )
+    if audit_enabled:
+        print("[risk_output]", json.dumps(risk_info, ensure_ascii=False))
+
+    # 4) Integrator (with retries + schema validation)
+    schema = _format_schema()
     last_error = None
+
+    integrator_messages = []
+
     for _ in range(max_retries):
-        if provider == "github":
-            content = _call_github_models(
-                api_base=api_base,
-                api_key=api_key,
-                model=model,
-                messages=messages,
-                timeout_seconds=timeout_seconds,
-            )
-        else:
-            content = _call_openai(
-                api_base=api_base,
-                api_key=api_key,
-                model=model,
-                messages=messages,
-                response_format=response_format,
-                timeout_seconds=timeout_seconds,
-            )
+        integrator_prompt = INTEGRATOR_USER.format(
+            plan_skeleton=json.dumps(plan_skeleton, ensure_ascii=False),
+            budget_info=json.dumps(budget_info, ensure_ascii=False),
+            risk_info=json.dumps(risk_info, ensure_ascii=False),
+            schema=schema,
+        )
+
+        if integrator_messages:
+            # 如果之前失败，追加修正提示
+            integrator_prompt = integrator_messages[-1]
+
+        final_content = _call_agent(
+            INTEGRATOR_SYSTEM,
+            integrator_prompt,
+            api_base,
+            api_key,
+            model,
+            response_format,
+            timeout_seconds,
+            provider,
+        )
         try:
-            data = _extract_json_object(content)
+            data = _extract_json_object(final_content)
             return PlanResponse.model_validate(data)
         except (json.JSONDecodeError, ValidationError) as exc:
             last_error = exc
-            messages.append(
-                {
-                    "role": "user",
-                    "content": (
-                        "Previous output failed validation:\\n"
-                        f"{exc}\\n"
-                        "Return ONLY valid JSON that matches the schema."
-                    ),
-                }
+            integrator_messages.append(
+                "Previous output failed validation:\n"
+                f"{exc}\n"
+                "Return ONLY valid JSON that matches the schema."
             )
-
     raise RuntimeError(f"LLM output invalid: {last_error}")
+
 
 
 def _build_user_prompt(req: PlanRequest) -> str:
@@ -189,3 +268,81 @@ def _extract_json_object(content: str) -> Dict[str, Any]:
         return json.loads(obj_match.group(0))
 
     raise json.JSONDecodeError("No JSON object found", content, 0)
+
+#统一封装“调用 LLM”的逻辑
+def _call_agent(
+    system_prompt: str,
+    user_prompt: str,
+    api_base: str,
+    api_key: str,
+    model: str,
+    response_format: str,
+    timeout_seconds: int,
+    provider: str,
+) -> str:
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    if provider == "github":
+        return _call_github_models(
+            api_base=api_base,
+            api_key=api_key,
+            model=model,
+            messages=messages,
+            timeout_seconds=timeout_seconds,
+        )
+    return _call_openai(
+        api_base=api_base,
+        api_key=api_key,
+        model=model,
+        messages=messages,
+        response_format=response_format,
+        timeout_seconds=timeout_seconds,
+    )
+
+#把模型返回的内容解析成 JSON 对象
+def _parse_json_or_raise(content: str) -> Dict[str, Any]:
+    data = _extract_json_object(content)
+    if not isinstance(data, dict):
+        raise RuntimeError("Agent output is not a JSON object")
+    return data
+
+#把最终 PlanResponse 的 JSON Schema 生成成字符串严格Json schema约束
+def _format_schema() -> str:
+    return json.dumps(PlanResponse.model_json_schema(), ensure_ascii=True)
+
+def _run_agent_with_retry(
+    system_prompt: str,
+    user_prompt: str,
+    api_base: str,
+    api_key: str,
+    model: str,
+    response_format: str,
+    timeout_seconds: int,
+    provider: str,
+    max_retries: int,
+) -> Dict[str, Any]:
+    last_error = None
+    prompt = user_prompt
+    for _ in range(max_retries):
+        content = _call_agent(
+            system_prompt,
+            prompt,
+            api_base,
+            api_key,
+            model,
+            response_format,
+            timeout_seconds,
+            provider,
+        )
+        try:
+            return _parse_json_or_raise(content)
+        except Exception as exc:
+            last_error = exc
+            prompt = (
+                "Previous output was invalid JSON.\n"
+                f"{exc}\n"
+                "Return ONLY valid JSON."
+            )
+    raise RuntimeError(f"Agent output invalid: {last_error}")

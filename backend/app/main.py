@@ -184,6 +184,14 @@ def get_preferences(authorization: str | None = Header(default=None)):
     return prefs
 
 
+@app.get('/api/me/search-history')
+def get_search_history(authorization: str | None = Header(default=None)):
+    user = get_optional_user(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    return db.load_search_history(user["id"])
+
+
 @app.put('/api/me/preferences')
 def update_preferences(req: PreferencesRequest, authorization: str | None = Header(default=None)):
     user = get_optional_user(authorization)
@@ -216,5 +224,6 @@ def plan(req: PlanRequest, authorization: str | None = Header(default=None)):
         }
         db.save_preferences(user["id"], prefs)
         db.save_plan(user["id"], result.model_dump())
+        db.save_search_history(user["id"], req.model_dump(), result.model_dump())
 
     return result

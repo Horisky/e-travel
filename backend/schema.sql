@@ -67,3 +67,11 @@ create table if not exists user_plans (
   data jsonb not null,
   created_at timestamptz not null default now()
 );
+
+create table if not exists user_search_history (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  query jsonb not null,
+  result jsonb not null,
+  created_at timestamptz not null default now()
+);

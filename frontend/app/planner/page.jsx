@@ -37,6 +37,7 @@ export default function PlannerPage() {
   const [showForm, setShowForm] = useState(true);
   const [userEmail, setUserEmail] = useState("");
   const [token, setToken] = useState("");
+  const [historyItems, setHistoryItems] = useState([]);
 
   const apiBase = useMemo(() => process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000", []);
 
@@ -50,12 +51,26 @@ export default function PlannerPage() {
     setToken(saved);
     setUserEmail(savedEmail || "");
     fetchPreferences(saved);
+    fetchHistory(saved);
   }, [router]);
 
   const authHeaders = () => ({
     "Content-Type": "application/json",
     Authorization: `Bearer ${token}`
   });
+
+  const fetchHistory = async (jwt) => {
+    try {
+      const resp = await fetch(`${apiBase}/api/me/search-history`, {
+        headers: { Authorization: `Bearer ${jwt || token}` }
+      });
+      if (!resp.ok) return;
+      const items = await resp.json();
+      setHistoryItems(Array.isArray(items) ? items : []);
+    } catch (e) {
+      // ignore
+    }
+  };
 
   const fetchPreferences = async (jwt) => {
     try {
@@ -99,6 +114,36 @@ export default function PlannerPage() {
     const list = Array.isArray(incoming) ? [...incoming] : [];
     const filtered = chosenDestination ? list.filter((item) => item.name !== chosenDestination) : list;
     return filtered.slice(0, 3);
+  };
+
+  const applyHistory = (item) => {
+    const query = item?.query || {};
+    setOrigin(query.origin || "");
+    setDestination(query.destination || "");
+    setStartDate(query.start_date || "");
+    setDays(query.days || 3);
+    setTravelers(query.travelers || 1);
+    setBudgetMin(query.budget_min ?? "");
+    setBudgetMax(query.budget_max ?? "");
+    setBudgetText(query.budget_text || "");
+    setPreferences(query.preferences || []);
+    setPace(query.pace || "适中");
+    setConstraintsText((query.constraints || []).join(", ") || DEFAULT_CONSTRAINTS);
+    if (item?.result) {
+      setData(item.result);
+      const nextTop = buildTopDestinations(item.result.top_destinations, query.destination);
+      setTopDestinations(nextTop);
+      setActiveDestination(query.destination || "");
+    }
+    setShowForm(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const formatHistoryTime = (value) => {
+    if (!value) return "未知时间";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "未知时间";
+    return date.toLocaleString("zh-CN");
   };
 
   const generatePlan = async (forcedDestination) => {
@@ -151,12 +196,99 @@ export default function PlannerPage() {
       setActiveDestination(forcedDestination || destination || "");
       setData(result);
       setShowForm(false);
+      fetchHistory();
     } catch (err) {
       setError(err.message || "生成行程失败，请稍后重试");
     } finally {
       setLoading(false);
     }
   };
+
+  const resultPanel = (
+    <section className="panel result-panel">
+      <div className="result-header">
+        <h2>行程结果</h2>
+        {loading ? <span className="hint">正在生成中，请稍等…</span> : null}
+        {data ? (
+          <div className="result-actions">
+            <button
+              className="ghost-button"
+              type="button"
+              onClick={() => {
+                setShowForm(true);
+                setData(null);
+                setTopDestinations([]);
+                setActiveDestination("");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+            >
+              返回
+            </button>
+            <button className="ghost-button" type="button" onClick={() => { setShowForm(true); window.scrollTo({ top: 0, behavior: "smooth" }); }}>修改需求</button>
+          </div>
+        ) : null}
+      </div>
+
+      {!data ? (
+        <div className="empty"><p>暂无结果</p><span>填写左侧表单开始规划旅行</span></div>
+      ) : (
+        <div className="results">
+          <section>
+            <h3>Top 推荐目的地</h3>
+            <div className="cards">
+              {(topDestinations.length ? topDestinations : data.top_destinations).map((item, idx) => (
+                <article
+                  key={`${item.name}-${idx}`}
+                  className={`card card-click ${loading ? "disabled" : ""}`}
+                  onClick={() => generatePlan(item.name)}
+                  role="button"
+                >
+                  <h4>{item.name}</h4>
+                  <ul>{item.reasons.map((reason, i) => (<li key={i}>{reason}</li>))}</ul>
+                  <p className="meta">预算：{item.budget_range}</p>
+                  <p className="meta">交通：{item.transport}</p>
+                  <p className="meta">最佳季节：{item.best_season}</p>
+                  <span className="chip mini">点击生成行程</span>
+                </article>
+              ))}
+            </div>
+          </section>
+          <section>
+            <h3>每日行程{activeDestination || destination || origin ? ` · ${origin || "出发地"} → ${activeDestination || destination || "目的地"}` : ""}</h3>
+            <div className="day-grid">
+              {data.daily_plan.map((day) => (
+                <article key={day.day} className="day-card">
+                  <h4>Day {day.day}</h4>
+                  {[{ label: "上午", block: day.morning }, { label: "下午", block: day.afternoon }, { label: "晚上", block: day.evening }].map((segment) => (
+                    <div key={segment.label} className="segment">
+                      <div className="segment-title"><span>{segment.label}</span><strong>{segment.block.title}</strong></div>
+                      <p>交通：{segment.block.transport}</p>
+                      <p>时长：{segment.block.duration_hours} 小时</p>
+                      <p>费用：{segment.block.cost_range}</p>
+                      {segment.block.alternatives.length ? (<p className="alt">备选：{segment.block.alternatives.join(" / ")}</p>) : null}
+                    </div>
+                  ))}
+                </article>
+              ))}
+            </div>
+          </section>
+          <section>
+            <h3>预算明细</h3>
+            <div className="budget-grid">
+              <div><span>交通</span><strong>{data.budget_breakdown.transport}</strong></div>
+              <div><span>住宿</span><strong>{data.budget_breakdown.lodging}</strong></div>
+              <div><span>餐饮</span><strong>{data.budget_breakdown.food}</strong></div>
+              <div><span>门票</span><strong>{data.budget_breakdown.tickets}</strong></div>
+              <div><span>市内交通</span><strong>{data.budget_breakdown.local_transport}</strong></div>
+            </div>
+          </section>
+          {data.warnings?.length ? (
+            <section><h3>注意事项</h3><ul className="warnings">{data.warnings.map((warn, idx) => (<li key={idx}>{warn}</li>))}</ul></section>
+          ) : null}
+        </div>
+      )}
+    </section>
+  );
 
   return (
     <div className="page">
@@ -247,75 +379,48 @@ export default function PlannerPage() {
           </section>
         ) : null}
 
-        <section className="panel result-panel">
-          <div className="result-header">
-            <h2>行程结果</h2>
-            {loading ? <span className="hint">正在生成中，请稍等…</span> : null}
-            {data ? (
-              <button className="ghost-button" type="button" onClick={() => { setShowForm(true); window.scrollTo({ top: 0, behavior: "smooth" }); }}>修改需求</button>
-            ) : null}
-          </div>
-
-          {!data ? (
-            <div className="empty"><p>暂无结果</p><span>填写左侧表单开始规划旅行</span></div>
-          ) : (
-            <div className="results">
-              <section>
-                <h3>Top 推荐目的地</h3>
-                <div className="cards">
-                  {(topDestinations.length ? topDestinations : data.top_destinations).map((item, idx) => (
-                    <article
-                      key={`${item.name}-${idx}`}
-                      className={`card card-click ${loading ? "disabled" : ""}`}
-                      onClick={() => generatePlan(item.name)}
-                      role="button"
-                    >
-                      <h4>{item.name}</h4>
-                      <ul>{item.reasons.map((reason, i) => (<li key={i}>{reason}</li>))}</ul>
-                      <p className="meta">预算：{item.budget_range}</p>
-                      <p className="meta">交通：{item.transport}</p>
-                      <p className="meta">最佳季节：{item.best_season}</p>
-                      <span className="chip mini">点击生成行程</span>
-                    </article>
-                  ))}
-                </div>
-              </section>
-              <section>
-                <h3>每日行程{activeDestination || destination || origin ? ` · ${origin || "出发地"} → ${activeDestination || destination || "目的地"}` : ""}</h3>
-                <div className="day-grid">
-                  {data.daily_plan.map((day) => (
-                    <article key={day.day} className="day-card">
-                      <h4>Day {day.day}</h4>
-                      {[{ label: "上午", block: day.morning }, { label: "下午", block: day.afternoon }, { label: "晚上", block: day.evening }].map((segment) => (
-                        <div key={segment.label} className="segment">
-                          <div className="segment-title"><span>{segment.label}</span><strong>{segment.block.title}</strong></div>
-                          <p>交通：{segment.block.transport}</p>
-                          <p>时长：{segment.block.duration_hours} 小时</p>
-                          <p>费用：{segment.block.cost_range}</p>
-                          {segment.block.alternatives.length ? (<p className="alt">备选：{segment.block.alternatives.join(" / ")}</p>) : null}
-                        </div>
-                      ))}
-                    </article>
-                  ))}
-                </div>
-              </section>
-              <section>
-                <h3>预算明细</h3>
-                <div className="budget-grid">
-                  <div><span>交通</span><strong>{data.budget_breakdown.transport}</strong></div>
-                  <div><span>住宿</span><strong>{data.budget_breakdown.lodging}</strong></div>
-                  <div><span>餐饮</span><strong>{data.budget_breakdown.food}</strong></div>
-                  <div><span>门票</span><strong>{data.budget_breakdown.tickets}</strong></div>
-                  <div><span>市内交通</span><strong>{data.budget_breakdown.local_transport}</strong></div>
-                </div>
-              </section>
-              {data.warnings?.length ? (
-                <section><h3>注意事项</h3><ul className="warnings">{data.warnings.map((warn, idx) => (<li key={idx}>{warn}</li>))}</ul></section>
-              ) : null}
+        {showForm ? (
+          <section className="panel history-panel">
+            <div className="result-header">
+              <h2>历史搜索</h2>
+              <span className="hint">最多保留 10 条历史搜索</span>
             </div>
-          )}
-        </section>
+            {data ? (
+              <div className="history-current">
+                <div className="history-label">当前搜索</div>
+                <div className="history-item static">
+                  <div className="history-title">{origin || "出发地"} → {destination || "目的地"}</div>
+                  <div className="history-meta">{startDate || "未填日期"} · {days || 0} 天 · {travelers || 1} 人</div>
+                  {budgetText ? <div className="history-meta">预算：{budgetText}</div> : null}
+                </div>
+              </div>
+            ) : null}
+            {!historyItems.length ? (
+              <div className="empty"><p>暂无历史</p><span>生成行程后会自动保存</span></div>
+            ) : (
+              <div className={`history-list ${data ? "with-current" : ""}`}>
+                {historyItems.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="history-item"
+                    onClick={() => applyHistory(item)}
+                  >
+                    <div className="history-title">{item.query?.origin || "出发地"} → {item.query?.destination || "目的地"}</div>
+                    <div className="history-meta">{item.query?.start_date || "未填日期"} · {item.query?.days || 0} 天 · {item.query?.travelers || 1} 人</div>
+                    {item.query?.budget_text ? <div className="history-meta">预算：{item.query?.budget_text}</div> : null}
+                    <div className="history-meta">搜索时间：{formatHistoryTime(item.created_at)}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : (
+          resultPanel
+        )}
       </main>
+
+      {showForm && data ? resultPanel : null}
 
       <footer className="footer">
         <span>Backend: {apiBase}</span>
