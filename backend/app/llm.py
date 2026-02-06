@@ -23,7 +23,7 @@ from .prompts import (
 
 def generate_plan_with_llm(req: PlanRequest) -> PlanResponse:
     provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
-    if provider not in {"openai", "github"}:
+    if provider not in {"openai", "github", "vectorengine"}:
         raise RuntimeError(f"Unsupported LLM_PROVIDER: {provider}")
 
     api_key = os.getenv("LLM_API_KEY", "").strip()
@@ -34,7 +34,8 @@ def generate_plan_with_llm(req: PlanRequest) -> PlanResponse:
         api_base = os.getenv("LLM_API_BASE", "https://models.github.ai/inference").strip()
         model = os.getenv("LLM_MODEL", "openai/gpt-4.1").strip()
     else:
-        api_base = os.getenv("LLM_API_BASE", "https://api.openai.com/v1").strip()
+        default_base = "https://api.vectorengine.ai/v1" if provider == "vectorengine" else "https://api.openai.com/v1"
+        api_base = os.getenv("LLM_API_BASE", default_base).strip()
         model = os.getenv("LLM_MODEL", "gpt-4o-mini").strip()
 
     response_format = os.getenv("LLM_RESPONSE_FORMAT", "json_object").strip()

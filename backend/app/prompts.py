@@ -34,6 +34,7 @@ Rules:
 1) Use only the user input.
 2) Output JSON only.
 3) Keep structure minimal: summary + daily skeleton.
+4) Output must be in Chinese.
 """
 
 PLANNER_USER = """
@@ -58,6 +59,7 @@ You are the Budget Agent. Your job is to estimate costs and propose alternatives
 Rules:
 1) Use the Planner output and user input.
 2) Output JSON only.
+3) Output must be in Chinese.
 """
 
 BUDGET_USER = """
@@ -78,6 +80,7 @@ You are the Risk Agent. Your job is to find conflicts, risks, or impractical par
 Rules:
 1) Use the Planner output and user input.
 2) Output JSON only.
+3) Output must be in Chinese.
 """
 
 RISK_USER = """
@@ -94,6 +97,7 @@ You are the Integrator Agent. Your job is to merge planner + budget + risk outpu
 Rules:
 1) Output strict JSON for the final response schema.
 2) Resolve conflicts and apply fixes.
+3) Output must be in Chinese.
 """
 
 INTEGRATOR_USER = """
@@ -108,4 +112,5 @@ Rules:
 - top_destinations must include exactly 3 alternative destinations and must NOT include the provided destination.
 
 Return final JSON that matches the schema exactly.
+Output must be in Chinese.
 """
