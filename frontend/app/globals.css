@@ -690,3 +690,17 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 1200px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel {
+    max-width: 100%;
+  }
+
+  .auth-card {
+    width: min(520px, 100%);
+  }
+}

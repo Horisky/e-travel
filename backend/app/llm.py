@@ -41,6 +41,7 @@ def generate_plan_with_llm(req: PlanRequest) -> PlanResponse:
     timeout_seconds = int(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
     max_retries = int(os.getenv("LLM_MAX_RETRIES", "2"))
     audit_enabled = os.getenv("AGENT_AUDIT_LOG", "false").lower() == "true"
+    budget_risk_enabled = os.getenv("ENABLE_BUDGET_RISK", "false").lower() == "true"
 
     budget = req.budget_text or _budget_range(req)
 
@@ -72,43 +73,48 @@ def generate_plan_with_llm(req: PlanRequest) -> PlanResponse:
     if audit_enabled:
         print("[planner_output]", json.dumps(plan_skeleton, ensure_ascii=False))#增加输出用来审计以下同理
 
-    # 2) Budget
-    budget_prompt = BUDGET_USER.format(
-        plan_skeleton=json.dumps(plan_skeleton, ensure_ascii=False),
-        budget=budget,
-        travelers=req.travelers,
-    )
-    budget_info = _run_agent_with_retry(
-        system_prompt=BUDGET_SYSTEM,
-        user_prompt=budget_prompt,
-        api_base=api_base,
-        api_key=api_key,
-        model=model,
-        response_format=response_format,
-        timeout_seconds=timeout_seconds,
-        provider=provider,
-        max_retries=max_retries,
-    )
-    if audit_enabled:
-        print("[budget_output]", json.dumps(budget_info, ensure_ascii=False))
+    if budget_risk_enabled:
+        # 2) Budget
+        budget_prompt = BUDGET_USER.format(
+            plan_skeleton=json.dumps(plan_skeleton, ensure_ascii=False),
+            budget=budget,
+            travelers=req.travelers,
+        )
+        budget_info = _run_agent_with_retry(
+            system_prompt=BUDGET_SYSTEM,
+            user_prompt=budget_prompt,
+            api_base=api_base,
+            api_key=api_key,
+            model=model,
+            response_format=response_format,
+            timeout_seconds=timeout_seconds,
+            provider=provider,
+            max_retries=max_retries,
+        )
+        if audit_enabled:
+            print("[budget_output]", json.dumps(budget_info, ensure_ascii=False))
 
-    # 3) Risk
-    risk_prompt = RISK_USER.format(
-        plan_skeleton=json.dumps(plan_skeleton, ensure_ascii=False),
-    )
-    risk_info = _run_agent_with_retry(
-        system_prompt=RISK_SYSTEM,
-        user_prompt=risk_prompt,
-        api_base=api_base,
-        api_key=api_key,
-        model=model,
-        response_format=response_format,
-        timeout_seconds=timeout_seconds,
-        provider=provider,
-        max_retries=max_retries,
-    )
-    if audit_enabled:
-        print("[risk_output]", json.dumps(risk_info, ensure_ascii=False))
+        # 3) Risk
+        risk_prompt = RISK_USER.format(
+            plan_skeleton=json.dumps(plan_skeleton, ensure_ascii=False),
+        )
+        risk_info = _run_agent_with_retry(
+            system_prompt=RISK_SYSTEM,
+            user_prompt=risk_prompt,
+            api_base=api_base,
+            api_key=api_key,
+            model=model,
+            response_format=response_format,
+            timeout_seconds=timeout_seconds,
+            provider=provider,
+            max_retries=max_retries,
+        )
+        if audit_enabled:
+            print("[risk_output]", json.dumps(risk_info, ensure_ascii=False))
+    else:
+        # 2) Budget/Risk disabled to reduce token usage
+        budget_info = {"budget_breakdown": {}, "alternatives": []}
+        risk_info = {"risks": [], "fixes": []}
 
     # 4) Integrator (with retries + schema validation)
     schema = _format_schema()
@@ -178,6 +184,15 @@ def _budget_range(req: PlanRequest) -> str:
         return f"<= {req.budget_max}"
     return "???"
 
+def _maybe_log_usage(data: Dict[str, Any]) -> None:
+    enabled = os.getenv("LLM_USAGE_LOG", "false").lower() == "true"
+    if not enabled:
+        return
+    usage = data.get("usage")
+    if usage is None:
+        return
+    print("[llm_usage]", usage)
+
 
 def _call_openai(
     api_base: str,
@@ -215,6 +230,7 @@ def _call_openai(
         resp = client.post(url, headers=headers, json=payload)
         resp.raise_for_status()
         data = resp.json()
+        _maybe_log_usage(data)
 
     try:
         return data["choices"][0]["message"]["content"]
@@ -246,6 +262,7 @@ def _call_github_models(
         resp = client.post(url, headers=headers, json=payload)
         resp.raise_for_status()
         data = resp.json()
+        _maybe_log_usage(data)
 
     try:
         return data["choices"][0]["message"]["content"]
