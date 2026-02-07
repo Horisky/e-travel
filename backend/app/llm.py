@@ -7,6 +7,11 @@ import httpx
 from pydantic import ValidationError
 
 from .schemas import PlanRequest, PlanResponse
+from .retrieval import (
+    retrieve_context,
+    retrieve_user_memory_context,
+    retrieve_weather_context,
+)
 from .prompts import (
     SYSTEM_GUARD,
     USER_TEMPLATE,
@@ -21,7 +26,7 @@ from .prompts import (
 )
 
 
-def generate_plan_with_llm(req: PlanRequest) -> PlanResponse:
+def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None) -> PlanResponse:
     provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
     if provider not in {"openai", "github", "vectorengine"}:
         raise RuntimeError(f"Unsupported LLM_PROVIDER: {provider}")
@@ -43,8 +48,47 @@ def generate_plan_with_llm(req: PlanRequest) -> PlanResponse:
     max_retries = int(os.getenv("LLM_MAX_RETRIES", "2"))
     audit_enabled = os.getenv("AGENT_AUDIT_LOG", "false").lower() == "true"
     budget_risk_enabled = os.getenv("ENABLE_BUDGET_RISK", "false").lower() == "true"
+    rag_enabled = os.getenv("RAG_ENABLED", "false").lower() == "true"
+    rag_top_k = int(os.getenv("RAG_TOP_K", "4"))
+    rag_use_kb = os.getenv("RAG_USE_KB", "true").lower() == "true"
+    rag_use_memory = os.getenv("RAG_USE_MEMORY", "true").lower() == "true"
+    rag_use_weather = os.getenv("RAG_USE_WEATHER", "true").lower() == "true"
 
     budget = req.budget_text or _budget_range(req)
+    rag_context = ""
+    memory_context = ""
+    weather_context = ""
+    if rag_enabled:
+        try:
+            query_text = " ".join(
+                [
+                    req.origin or "",
+                    req.destination or "",
+                    req.budget_text or "",
+                    " ".join(req.preferences or []),
+                    " ".join(req.constraints or []),
+                ]
+            ).strip()
+            if query_text:
+                if rag_use_kb:
+                    chunks = retrieve_context(query_text, top_k=rag_top_k)
+                    rag_context = _format_rag_context(chunks)
+                    if audit_enabled:
+                        print("[rag_kb_hits]", len(chunks))
+                if rag_use_memory and user_id:
+                    memory_chunks = retrieve_user_memory_context(user_id, query_text, top_k=rag_top_k)
+                    memory_context = _format_rag_context(memory_chunks)
+                    if audit_enabled:
+                        print("[rag_memory_hits]", len(memory_chunks))
+                if rag_use_weather:
+                    weather_context = retrieve_weather_context(req.destination, req.start_date, req.days)
+                    if audit_enabled and weather_context:
+                        print("[rag_weather]", "available")
+                if audit_enabled:
+                    print("[rag_enabled]", "true")
+        except Exception as exc:
+            if audit_enabled:
+                print("[rag_error]", str(exc))
 
     # 1) Planner
     planner_prompt = PLANNER_USER.format(
@@ -58,6 +102,26 @@ def generate_plan_with_llm(req: PlanRequest) -> PlanResponse:
         pace=req.pace,
         constraints="?".join(req.constraints) or "?",
     )
+    if rag_context or memory_context or weather_context:
+        sections: List[str] = []
+        if rag_context:
+            sections.append(
+                "Retrieved knowledge base context (use this as priority factual reference):\n"
+                f"{rag_context}"
+            )
+        if memory_context:
+            sections.append(
+                "Retrieved user memory context (personal preference/history reference):\n"
+                f"{memory_context}"
+            )
+        if weather_context:
+            sections.append(f"Realtime weather context:\n{weather_context}")
+        planner_prompt += (
+            "\n\n"
+            + "\n\n".join(sections)
+            + "\n"
+            "If context is insufficient, state uncertainty instead of fabricating facts."
+        )
 
     plan_skeleton = _run_agent_with_retry(
         system_prompt=PLANNER_SYSTEM,
@@ -329,6 +393,19 @@ def _parse_json_or_raise(content: str) -> Dict[str, Any]:
 #把最终 PlanResponse 的 JSON Schema 生成成字符串严格Json schema约束
 def _format_schema() -> str:
     return json.dumps(PlanResponse.model_json_schema(), ensure_ascii=True)
+
+
+def _format_rag_context(chunks: List[Dict[str, Any]]) -> str:
+    if not chunks:
+        return ""
+    lines: List[str] = []
+    for i, chunk in enumerate(chunks, start=1):
+        title = chunk.get("title") or "Untitled"
+        source = chunk.get("source") or "unknown"
+        content = (chunk.get("content") or "").strip()
+        lines.append(f"[{i}] {title} (source: {source})")
+        lines.append(content[:1200])
+    return "\n".join(lines)
 
 def _run_agent_with_retry(
     system_prompt: str,

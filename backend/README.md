@@ -39,6 +39,29 @@ GitHub Models example:
 - LLM integration is stubbed; replace `generate_plan()` with your provider call.
 - DB tables are in `schema.sql`.
 
+## RAG (Optional)
+
+1. Create `backend/knowledge/` and add `.txt` files.
+2. Ensure DB has `knowledge_docs` table and `vector` extension.
+3. Set env:
+   - `RAG_ENABLED=true`
+   - `RAG_TOP_K=4`
+   - `RAG_USE_KB=true`
+   - `RAG_USE_MEMORY=true`
+   - `RAG_USE_WEATHER=true`
+   - `EMBEDDING_MODEL=text-embedding-3-small`
+4. Ingest documents:
+
+```powershell
+cd backend
+python scripts/ingest_knowledge.py
+```
+
+Note:
+- `RAG_USE_KB` retrieves from common knowledge base (`knowledge_docs`).
+- `RAG_USE_MEMORY` retrieves from per-user memory vectors (`user_memory_docs`).
+- `RAG_USE_WEATHER` injects realtime weather context from Open-Meteo.
+
 ## Multi-Agent Flow
 
 This backend uses a multi-agent LLM pipeline:

@@ -23,6 +23,7 @@ from .schemas import (
     PreferencesRequest,
 )
 from .llm import generate_plan_with_llm
+from .retrieval import save_user_memory_from_plan
 from . import db
 
 app = FastAPI(title='Travel Planner API')
@@ -206,7 +207,7 @@ def update_preferences(req: PreferencesRequest, authorization: str | None = Head
 def plan(req: PlanRequest, authorization: str | None = Header(default=None)):
     user = get_optional_user(authorization)
     try:
-        result = generate_plan_with_llm(req)
+        result = generate_plan_with_llm(req, user_id=(str(user["id"]) if user else None))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -225,5 +226,6 @@ def plan(req: PlanRequest, authorization: str | None = Header(default=None)):
         db.save_preferences(user["id"], prefs)
         db.save_plan(user["id"], result.model_dump())
         db.save_search_history(user["id"], req.model_dump(), result.model_dump())
+        save_user_memory_from_plan(str(user["id"]), req.model_dump(), result.model_dump())
 
     return result

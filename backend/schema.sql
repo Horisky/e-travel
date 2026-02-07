@@ -75,3 +75,13 @@ create table if not exists user_search_history (
   result jsonb not null,
   created_at timestamptz not null default now()
 );
+
+create table if not exists user_memory_docs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  title text not null,
+  source text,
+  content text not null,
+  embedding vector(1536) not null,
+  created_at timestamptz not null default now()
+);

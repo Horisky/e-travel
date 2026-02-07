@@ -15,6 +15,10 @@ JWT_EXPIRE_MINUTES = int(os.getenv('JWT_EXPIRE_MINUTES', '10080'))
 
 _pool = None
 
+
+def _to_pgvector(values: list[float]) -> str:
+    return "[" + ",".join(str(v) for v in values) + "]"
+
 def get_pool():
     global _pool
     if not DATABASE_URL:
@@ -242,3 +246,59 @@ def load_search_history(user_id: str, limit: int = 10) -> list[Dict[str, Any]]:
                     }
                 )
             return items
+
+
+def save_user_memory_doc(user_id: str, title: str, source: str, content: str, embedding: list[float]) -> None:
+    pool = get_pool()
+    if pool is None:
+        return
+    vector_str = _to_pgvector(embedding)
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                insert into user_memory_docs (user_id, title, source, content, embedding)
+                values (%s, %s, %s, %s, %s::vector)
+                """,
+                (user_id, title, source, content, vector_str),
+            )
+            cur.execute(
+                """
+                delete from user_memory_docs
+                where id in (
+                    select id from user_memory_docs
+                    where user_id=%s
+                    order by created_at desc offset 100
+                )
+                """,
+                (user_id,),
+            )
+
+
+def load_user_memory_by_vector(user_id: str, embedding: list[float], limit: int = 4) -> list[Dict[str, Any]]:
+    pool = get_pool()
+    if pool is None:
+        return []
+    vector_str = _to_pgvector(embedding)
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select id, title, source, content
+                from user_memory_docs
+                where user_id=%s
+                order by embedding <=> %s::vector
+                limit %s
+                """,
+                (user_id, vector_str, limit),
+            )
+            rows = cur.fetchall() or []
+            return [
+                {
+                    "id": str(row[0]),
+                    "title": row[1],
+                    "source": row[2],
+                    "content": row[3],
+                }
+                for row in rows
+            ]
