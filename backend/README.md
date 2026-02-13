@@ -50,11 +50,14 @@ GitHub Models example:
    - `RAG_USE_MEMORY=true`
    - `RAG_USE_WEATHER=true`
    - `EMBEDDING_MODEL=text-embedding-3-small`
+   - `MCP_ENABLED=false` (set `true` to enable MCP weather tool first)
+   - `MCP_WEATHER_URL=` (your MCP weather endpoint)
+   - `MCP_TOKEN=` (optional bearer token for MCP endpoint)
 4. Ingest documents:
 
 ```powershell
 cd backend
-python scripts/ingest_knowledge.py
+python -m scripts.ingest_knowledge
 ```
 
 Note:
@@ -71,3 +74,22 @@ This backend uses a multi-agent LLM pipeline:
 4. Integrator Agent merges outputs and validates against the JSON schema.
 
 This improves controllability, explainability, and output stability compared to a single-call model.
+
+## MCP Weather Tool (Optional)
+
+Run local MCP weather service:
+
+```powershell
+cd backend
+uvicorn mcp_weather_server:app --host 127.0.0.1 --port 9001 --reload
+```
+
+Then set backend `.env`:
+
+```env
+MCP_ENABLED=true
+MCP_WEATHER_URL=http://127.0.0.1:9001/weather
+MCP_TOKEN=
+```
+
+If you set `MCP_TOKEN=xxx` for the MCP service process, set the same value in backend `.env`.

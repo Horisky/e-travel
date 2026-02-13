@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 import httpx
 from pydantic import ValidationError
 
+from .settings import Settings, get_settings
 from .schemas import PlanRequest, PlanResponse
 from .retrieval import (
     retrieve_context,
@@ -26,38 +27,40 @@ from .prompts import (
 )
 
 
-def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None) -> PlanResponse:
-    provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
+async def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None, settings: Settings | None = None) -> PlanResponse:
+    settings = settings or get_settings()
+
+    provider = settings.llm_provider.strip().lower()
     if provider not in {"openai", "github", "vectorengine"}:
         raise RuntimeError(f"Unsupported LLM_PROVIDER: {provider}")
 
-    api_key = os.getenv("LLM_API_KEY", "").strip()
+    api_key = settings.llm_api_key.strip()
     if not api_key:
         raise RuntimeError("LLM_API_KEY not set")
 
-    if provider == "github":
-        api_base = os.getenv("LLM_API_BASE", "https://models.github.ai/inference").strip()
-        model = os.getenv("LLM_MODEL", "openai/gpt-4.1").strip()
-    else:
-        default_base = "https://api.vectorengine.ai/v1" if provider == "vectorengine" else "https://api.openai.com/v1"
-        api_base = os.getenv("LLM_API_BASE", default_base).strip()
-        model = os.getenv("LLM_MODEL", "gpt-4o-mini").strip()
+    api_base = settings.llm_api_base
+    model = settings.llm_model
 
-    response_format = os.getenv("LLM_RESPONSE_FORMAT", "json_object").strip()
-    timeout_seconds = int(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
-    max_retries = int(os.getenv("LLM_MAX_RETRIES", "2"))
-    audit_enabled = os.getenv("AGENT_AUDIT_LOG", "false").lower() == "true"
-    budget_risk_enabled = os.getenv("ENABLE_BUDGET_RISK", "false").lower() == "true"
-    rag_enabled = os.getenv("RAG_ENABLED", "false").lower() == "true"
-    rag_top_k = int(os.getenv("RAG_TOP_K", "4"))
-    rag_use_kb = os.getenv("RAG_USE_KB", "true").lower() == "true"
-    rag_use_memory = os.getenv("RAG_USE_MEMORY", "true").lower() == "true"
-    rag_use_weather = os.getenv("RAG_USE_WEATHER", "true").lower() == "true"
+    response_format = settings.llm_response_format
+    timeout_seconds = settings.llm_timeout_seconds
+    max_retries = settings.llm_max_retries
+    audit_enabled = settings.agent_audit_log
+    budget_risk_enabled = settings.enable_budget_risk
+    rag_enabled = settings.rag_enabled
+    rag_top_k = settings.rag_top_k
+    rag_use_kb = settings.rag_use_kb
+    rag_use_memory = settings.rag_use_memory
+    rag_use_weather = settings.rag_use_weather
+    mcp_enabled = settings.mcp_enabled
 
     budget = req.budget_text or _budget_range(req)
     rag_context = ""
     memory_context = ""
     weather_context = ""
+    rag_kb_hits = 0
+    rag_memory_hits = 0
+    rag_weather_status = "disabled"
+    rag_weather_source = "disabled"
     if rag_enabled:
         try:
             query_text = " ".join(
@@ -71,24 +74,42 @@ def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None) -> Plan
             ).strip()
             if query_text:
                 if rag_use_kb:
-                    chunks = retrieve_context(query_text, top_k=rag_top_k)
+                    chunks = await retrieve_context(query_text, top_k=rag_top_k)
                     rag_context = _format_rag_context(chunks)
+                    rag_kb_hits = len(chunks)
                     if audit_enabled:
-                        print("[rag_kb_hits]", len(chunks))
+                        print("[rag_kb_hits]", rag_kb_hits)
                 if rag_use_memory and user_id:
-                    memory_chunks = retrieve_user_memory_context(user_id, query_text, top_k=rag_top_k)
+                    memory_chunks = await retrieve_user_memory_context(user_id, query_text, top_k=rag_top_k)
                     memory_context = _format_rag_context(memory_chunks)
+                    rag_memory_hits = len(memory_chunks)
                     if audit_enabled:
-                        print("[rag_memory_hits]", len(memory_chunks))
+                        print("[rag_memory_hits]", rag_memory_hits)
                 if rag_use_weather:
-                    weather_context = retrieve_weather_context(req.destination, req.start_date, req.days)
-                    if audit_enabled and weather_context:
-                        print("[rag_weather]", "available")
+                    rag_weather_source = "mcp-first" if mcp_enabled else "open-meteo"
+                    weather_context = await retrieve_weather_context(req.destination, req.start_date, req.days)
+                    rag_weather_status = "available" if weather_context else "empty"
+                    if audit_enabled:
+                        print("[rag_weather]", rag_weather_status)
                 if audit_enabled:
                     print("[rag_enabled]", "true")
+                    print(
+                        "[rag_audit]",
+                        f"kb_hits={rag_kb_hits} memory_hits={rag_memory_hits} "
+                        f"weather={rag_weather_status} source={rag_weather_source}",
+                    )
         except Exception as exc:
+            rag_weather_status = "error"
             if audit_enabled:
                 print("[rag_error]", str(exc))
+                print(
+                    "[rag_audit]",
+                    f"kb_hits={rag_kb_hits} memory_hits={rag_memory_hits} "
+                    f"weather={rag_weather_status} source={rag_weather_source}",
+                )
+    elif audit_enabled:
+        print("[rag_enabled]", "false")
+        print("[rag_audit]", "kb_hits=0 memory_hits=0 weather=disabled source=disabled")
 
     # 1) Planner
     planner_prompt = PLANNER_USER.format(
@@ -123,7 +144,7 @@ def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None) -> Plan
             "If context is insufficient, state uncertainty instead of fabricating facts."
         )
 
-    plan_skeleton = _run_agent_with_retry(
+    plan_skeleton = await _run_agent_with_retry(
         system_prompt=PLANNER_SYSTEM,
         user_prompt=planner_prompt,
         api_base=api_base,
@@ -145,7 +166,7 @@ def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None) -> Plan
             budget=budget,
             travelers=req.travelers,
         )
-        budget_info = _run_agent_with_retry(
+        budget_info = await _run_agent_with_retry(
             system_prompt=BUDGET_SYSTEM,
             user_prompt=budget_prompt,
             api_base=api_base,
@@ -163,7 +184,7 @@ def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None) -> Plan
         risk_prompt = RISK_USER.format(
             plan_skeleton=json.dumps(plan_skeleton, ensure_ascii=False),
         )
-        risk_info = _run_agent_with_retry(
+        risk_info = await _run_agent_with_retry(
             system_prompt=RISK_SYSTEM,
             user_prompt=risk_prompt,
             api_base=api_base,
@@ -199,7 +220,7 @@ def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None) -> Plan
             # 如果之前失败，追加修正提示
             integrator_prompt = integrator_messages[-1]
 
-        final_content = _call_agent(
+        final_content = await _call_agent(
             INTEGRATOR_SYSTEM,
             integrator_prompt,
             api_base,
@@ -259,7 +280,7 @@ def _maybe_log_usage(data: Dict[str, Any]) -> None:
     print("[llm_usage]", usage)
 
 
-def _call_openai(
+async def _call_openai(
     api_base: str,
     api_key: str,
     model: str,
@@ -291,8 +312,8 @@ def _call_openai(
         "Content-Type": "application/json",
     }
 
-    with httpx.Client(timeout=timeout_seconds) as client:
-        resp = client.post(url, headers=headers, json=payload)
+    async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+        resp = await client.post(url, headers=headers, json=payload)
         resp.raise_for_status()
         data = resp.json()
         _maybe_log_usage(data)
@@ -303,7 +324,7 @@ def _call_openai(
         raise RuntimeError(f"Unexpected LLM response: {data}") from exc
 
 
-def _call_github_models(
+async def _call_github_models(
     api_base: str,
     api_key: str,
     model: str,
@@ -323,8 +344,8 @@ def _call_github_models(
         "Content-Type": "application/json",
     }
 
-    with httpx.Client(timeout=timeout_seconds) as client:
-        resp = client.post(url, headers=headers, json=payload)
+    async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+        resp = await client.post(url, headers=headers, json=payload)
         resp.raise_for_status()
         data = resp.json()
         _maybe_log_usage(data)
@@ -352,7 +373,7 @@ def _extract_json_object(content: str) -> Dict[str, Any]:
     raise json.JSONDecodeError("No JSON object found", content, 0)
 
 #统一封装“调用 LLM”的逻辑
-def _call_agent(
+async def _call_agent(
     system_prompt: str,
     user_prompt: str,
     api_base: str,
@@ -367,14 +388,14 @@ def _call_agent(
         {"role": "user", "content": user_prompt},
     ]
     if provider == "github":
-        return _call_github_models(
+        return await _call_github_models(
             api_base=api_base,
             api_key=api_key,
             model=model,
             messages=messages,
             timeout_seconds=timeout_seconds,
         )
-    return _call_openai(
+    return await _call_openai(
         api_base=api_base,
         api_key=api_key,
         model=model,
@@ -407,7 +428,7 @@ def _format_rag_context(chunks: List[Dict[str, Any]]) -> str:
         lines.append(content[:1200])
     return "\n".join(lines)
 
-def _run_agent_with_retry(
+async def _run_agent_with_retry(
     system_prompt: str,
     user_prompt: str,
     api_base: str,
@@ -421,7 +442,7 @@ def _run_agent_with_retry(
     last_error = None
     prompt = user_prompt
     for _ in range(max_retries):
-        content = _call_agent(
+        content = await _call_agent(
             system_prompt,
             prompt,
             api_base,

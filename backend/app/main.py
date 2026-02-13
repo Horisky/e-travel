@@ -1,4 +1,6 @@
 import os
+import asyncio
+import sys
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -8,7 +10,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, Header
+# Psycopg async on Windows requires Selector event loop.
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from .schemas import (
@@ -25,39 +31,31 @@ from .schemas import (
 from .llm import generate_plan_with_llm
 from .retrieval import save_user_memory_from_plan
 from . import db
+from .settings import get_settings
 
 app = FastAPI(title='Travel Planner API')
 
-RESEND_API_KEY = os.getenv("RESEND_API_KEY", "").strip()
-EMAIL_FROM = os.getenv("EMAIL_FROM", "E-Travel <no-reply@yourdomain.com>").strip()
+settings = get_settings()
 
 
-def send_email(to_email: str, subject: str, text: str) -> None:
-    if not RESEND_API_KEY:
+async def send_email(to_email: str, subject: str, text: str) -> None:
+    if not settings.resend_api_key:
         raise RuntimeError("RESEND_API_KEY not set")
-    if not EMAIL_FROM:
+    if not settings.email_from:
         raise RuntimeError("EMAIL_FROM not set")
-    resp = httpx.post(
-        "https://api.resend.com/emails",
-        headers={"Authorization": f"Bearer {RESEND_API_KEY}"},
-        json={"from": EMAIL_FROM, "to": [to_email], "subject": subject, "text": text},
-        timeout=20.0,
-    )
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        resp = await client.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {settings.resend_api_key}"},
+            json={"from": settings.email_from, "to": [to_email], "subject": subject, "text": text},
+        )
     if resp.status_code >= 400:
         raise RuntimeError(f"Resend error: {resp.status_code} {resp.text}")
 
-cors_env = os.getenv("CORS_ORIGINS", "").strip()
-extra_origins = [o.strip() for o in cors_env.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://e-travel-murex.vercel.app",
-        "https://e-travel-s5rj.vercel.app",
-        *extra_origins,
-    ],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -86,41 +84,51 @@ def get_optional_user(authorization: str | None) -> dict | None:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
+def optional_user_dep(authorization: str | None = Header(default=None)) -> dict | None:
+    return get_optional_user(authorization)#从 Header 取 Authorization 并解析成 user 或 None
+
+
+def current_user_dep(user: dict | None = Depends(optional_user_dep)) -> dict:
+    if not user:
+        raise HTTPException(status_code=401, detail="Unauthorized")#强制必须登录，否则 401
+    return user
+
+
 @app.get('/health')
-def health():
+async def health():
     return {'status': 'ok'}
 
 
 @app.post('/api/auth/register')
-def register(req: AuthRegisterRequest):
-    if not db.verify_code(req.email, req.code, "register"):
+async def register(req: AuthRegisterRequest):
+    if not await db.verify_code(req.email, req.code, "register"):
         raise HTTPException(status_code=401, detail="Invalid code")
-    if db.get_user_by_email(req.email):
+    if await db.get_user_by_email(req.email):
         raise HTTPException(status_code=400, detail="Email already registered")
-    db.create_user(req.email, req.password)
-    user = db.get_user_by_email(req.email)
+    await db.create_user(req.email, req.password)
+    user = await db.get_user_by_email(req.email)
     token = create_token(user)
     return {"token": token, "email": user["email"]}
 
 
 @app.post('/api/auth/register/request')
-def register_code_request(req: AuthCodeRequest):
-    if db.get_user_by_email(req.email):
+async def register_code_request(req: AuthCodeRequest):
+    if await db.get_user_by_email(req.email):
         raise HTTPException(status_code=400, detail="Email already registered")
     code = f"{secrets.randbelow(1000000):06d}"
-    db.store_code(req.email, code, "register")
-    send_code = os.getenv("SEND_CODE_IN_RESPONSE", "true").lower() == "true"
+    await db.store_code(req.email, code, "register")
+    send_code = settings.send_code_in_response
     if not send_code:
         try:
-            send_email(req.email, "E-Travel 注册验证码", f"你的注册验证码是：{code}\n10 分钟内有效。")
+            await send_email(req.email, "E-Travel 注册验证码", f"你的注册验证码是：{code}\n10 分钟内有效。")
         except Exception:
             raise HTTPException(status_code=500, detail="Failed to send email")
     return {"message": "code sent", **({"code": code} if send_code else {})}
 
 
 @app.post('/api/auth/login')
-def login(req: AuthLoginRequest):
-    user = db.get_user_by_email(req.email)
+async def login(req: AuthLoginRequest):
+    user = await db.get_user_by_email(req.email)
     if not user or not db.verify_password(req.password, user["password_salt"], user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = create_token(user)
@@ -128,86 +136,77 @@ def login(req: AuthLoginRequest):
 
 
 @app.post('/api/auth/login-code/request')
-def login_code_request(req: AuthCodeRequest):
-    user = db.get_user_by_email(req.email)
+async def login_code_request(req: AuthCodeRequest):
+    user = await db.get_user_by_email(req.email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     code = f"{secrets.randbelow(1000000):06d}"
-    db.store_code(req.email, code, "login")
-    send_code = os.getenv("SEND_CODE_IN_RESPONSE", "true").lower() == "true"
+    await db.store_code(req.email, code, "login")
+    send_code = settings.send_code_in_response
     if not send_code:
         try:
-            send_email(req.email, "E-Travel 登录验证码", f"你的登录验证码是：{code}\n10 分钟内有效。")
+            await send_email(req.email, "E-Travel 登录验证码", f"你的登录验证码是：{code}\n10 分钟内有效。")
         except Exception:
             raise HTTPException(status_code=500, detail="Failed to send email")
     return {"message": "code sent", **({"code": code} if send_code else {})}
 
 
 @app.post('/api/auth/login-code/verify')
-def login_code_verify(req: AuthCodeVerifyRequest):
-    if not db.verify_code(req.email, req.code, "login"):
+async def login_code_verify(req: AuthCodeVerifyRequest):
+    if not await db.verify_code(req.email, req.code, "login"):
         raise HTTPException(status_code=401, detail="Invalid code")
-    user = db.get_user_by_email(req.email)
+    user = await db.get_user_by_email(req.email)
     token = create_token(user)
     return {"token": token, "email": user["email"]}
 
 
 @app.post('/api/auth/reset-password/request')
-def reset_password_request(req: ResetPasswordRequest):
-    user = db.get_user_by_email(req.email)
+async def reset_password_request(req: ResetPasswordRequest):
+    user = await db.get_user_by_email(req.email)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     code = f"{secrets.randbelow(1000000):06d}"
-    db.store_code(req.email, code, "reset")
-    send_code = os.getenv("SEND_CODE_IN_RESPONSE", "true").lower() == "true"
+    await db.store_code(req.email, code, "reset")
+    send_code = settings.send_code_in_response
     if not send_code:
         try:
-            send_email(req.email, "E-Travel 重置密码验证码", f"你的重置验证码是：{code}\n10 分钟内有效。")
+            await send_email(req.email, "E-Travel 重置密码验证码", f"你的重置验证码是：{code}\n10 分钟内有效。")
         except Exception:
             raise HTTPException(status_code=500, detail="Failed to send email")
     return {"message": "code sent", **({"code": code} if send_code else {})}
 
 
 @app.post('/api/auth/reset-password/confirm')
-def reset_password_confirm(req: ResetPasswordConfirmRequest):
-    if not db.verify_code(req.email, req.code, "reset"):
+async def reset_password_confirm(req: ResetPasswordConfirmRequest):
+    if not await db.verify_code(req.email, req.code, "reset"):
         raise HTTPException(status_code=401, detail="Invalid code")
-    db.update_password(req.email, req.new_password)
+    await db.update_password(req.email, req.new_password)
     return {"message": "password updated"}
 
 
 @app.get('/api/me/preferences')
-def get_preferences(authorization: str | None = Header(default=None)):
-    user = get_optional_user(authorization)
-    if not user:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    prefs = db.load_preferences(user["id"]) or {}
+async def get_preferences(user: dict = Depends(current_user_dep)):
+    prefs = await db.load_preferences(user["id"]) or {}
     return prefs
 
 
 @app.get('/api/me/search-history')
-def get_search_history(authorization: str | None = Header(default=None)):
-    user = get_optional_user(authorization)
-    if not user:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return db.load_search_history(user["id"])
+async def get_search_history(user: dict = Depends(current_user_dep)):
+    return await db.load_search_history(user["id"])
 
 
 @app.put('/api/me/preferences')
-def update_preferences(req: PreferencesRequest, authorization: str | None = Header(default=None)):
-    user = get_optional_user(authorization)
-    if not user:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+async def update_preferences(req: PreferencesRequest, user: dict = Depends(current_user_dep)):
     prefs = req.model_dump()
-    db.save_preferences(user["id"], prefs)
+    await db.save_preferences(user["id"], prefs)
     return {"status": "ok"}
 
 
+
 @app.post('/api/plan', response_model=PlanResponse)
-def plan(req: PlanRequest, authorization: str | None = Header(default=None)):
-    user = get_optional_user(authorization)
+async def plan(req: PlanRequest, user: dict | None = Depends(optional_user_dep)):
     try:
-        result = generate_plan_with_llm(req, user_id=(str(user["id"]) if user else None))
+        result = await generate_plan_with_llm(req, user_id=(str(user["id"]) if user else None))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -223,9 +222,9 @@ def plan(req: PlanRequest, authorization: str | None = Header(default=None)):
             "pace": req.pace,
             "constraints": req.constraints,
         }
-        db.save_preferences(user["id"], prefs)
-        db.save_plan(user["id"], result.model_dump())
-        db.save_search_history(user["id"], req.model_dump(), result.model_dump())
-        save_user_memory_from_plan(str(user["id"]), req.model_dump(), result.model_dump())
+        await db.save_preferences(user["id"], prefs)
+        await db.save_plan(user["id"], result.model_dump())
+        await db.save_search_history(user["id"], req.model_dump(), result.model_dump())
+        await save_user_memory_from_plan(str(user["id"]), req.model_dump(), result.model_dump())
 
     return result
