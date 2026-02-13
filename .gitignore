@@ -6,3 +6,5 @@ __pycache__/
 !.env.example
 frontend/node_modules/
 frontend/.next/
+backend/uvicorn.err
+backend/uvicorn.out
