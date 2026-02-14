@@ -165,7 +165,7 @@ npm run dev
 | MCP_WEATHER_URL | MCP weather endpoint |
 | MCP_TOKEN | MCP bearer token |
 
-> ⚠️ Never commit real secrets to GitHub.
+
 
 ---
 
