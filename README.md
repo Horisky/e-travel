@@ -1,4 +1,4 @@
-﻿# 🌍 E-Travel — AI-Powered Travel Planner
+# 🌍 E-Travel — AI-Powered Travel Planner
 
 E-Travel is a full-stack web app that generates personalized travel itineraries with LLMs. It includes a landing intro, login/register, preference memory, and structured day-by-day plans. Because of free render, waiting 2-5 mins for first open, V1.0:[https://app.aivault.asia/]
 E-Travel 是一个全栈旅行规划应用，基于大模型生成个性化行程，包含首页介绍、登录/注册、偏好记忆与结构化日程。由于使用免费render部署，平台会自动休眠，须等待2-5分钟方可正常使用,目前已发布V1.0版本：[https://app.aivault.asia/]
@@ -9,6 +9,12 @@ E-Travel 是一个全栈旅行规划应用，基于大模型生成个性化行�
 
 - LLM-driven itinerary generation (Top 3 destinations + daily plans)
   基于 LLM 生成 Top 3 推荐目的地 + 逐日行程
+- Multi-agent pipeline (Planner / Budget / Risk / Integrator)
+  多 Agent 链路编排（规划 / 预算 / 风险 / 聚合）
+- RAG (knowledge base + user memory + weather tools)
+  三层 RAG（知识库 + 用户记忆 + 天气工具）
+- MCP weather tool (MCP-first, fallback to Open-Meteo)
+  MCP 天气工具（优先 MCP，失败回退 Open-Meteo）
 - Login/register with email code verification
   邮箱登录/注册 + 验证码校验
 - Preference memory (saved per user)
@@ -27,7 +33,9 @@ Browser (Next.js)
       ↓ HTTP
 FastAPI Backend
       ↓
-LLM Provider (OpenAI / GitHub Models)
+LLM Provider (OpenAI / GitHub Models / VectorEngine)
+      ↓
+Postgres + MCP Weather
 ```
 
 ---
@@ -37,7 +45,7 @@ LLM Provider (OpenAI / GitHub Models)
 **Backend | 后端**
 - Python 3 + FastAPI
 - Pydantic v2, httpx
-- PostgreSQL (Render)
+- PostgreSQL (Render) + pgvector
 - JWT auth + email code verification
 
 **Frontend | 前端**
@@ -48,6 +56,7 @@ LLM Provider (OpenAI / GitHub Models)
 - Frontend: Vercel
 - Backend: Render
 - Database: Render Postgres
+- MCP Weather: Render (separate service)
 
 ---
 
@@ -85,9 +94,9 @@ EMAIL_FROM=E-Travel <onboarding@resend.dev>
 SEND_CODE_IN_RESPONSE=true
 ```
 
-Run backend:
+Run backend (Windows):
 ```
-uvicorn app.main:app --reload
+uvicorn asgi:app --reload
 ```
 
 ### 3) Frontend
@@ -137,7 +146,7 @@ npm run dev
 
 | Variable | Description |
 | --- | --- |
-| LLM_PROVIDER | openai / github |
+| LLM_PROVIDER | openai / github / vectorengine |
 | LLM_API_KEY | LLM API key |
 | LLM_API_BASE | API base URL |
 | LLM_MODEL | Model name |
@@ -148,6 +157,13 @@ npm run dev
 | EMAIL_FROM | Sender email (optional) |
 | SEND_CODE_IN_RESPONSE | true = return code in response (dev) |
 | NEXT_PUBLIC_API_BASE | Frontend → backend base URL |
+| RAG_ENABLED | Enable RAG |
+| RAG_USE_KB | Knowledge base retrieval |
+| RAG_USE_MEMORY | User memory retrieval |
+| RAG_USE_WEATHER | Weather context retrieval |
+| MCP_ENABLED | MCP-first weather |
+| MCP_WEATHER_URL | MCP weather endpoint |
+| MCP_TOKEN | MCP bearer token |
 
 > ⚠️ Never commit real secrets to GitHub.
 
@@ -157,6 +173,8 @@ npm run dev
 
 - If you set `SEND_CODE_IN_RESPONSE=true`, the backend will return the code directly instead of sending email (dev mode).
 - For production email, verify your own domain in Resend.
+- Windows: use `uvicorn asgi:app --reload` to avoid psycopg async event loop issues.
+- MCP is optional; the backend falls back to Open‑Meteo when MCP is unavailable.
 
 ---
 
