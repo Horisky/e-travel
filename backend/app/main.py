@@ -16,6 +16,9 @@ if sys.platform == "win32":
 
 from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 
 from .schemas import (
     PlanRequest,
@@ -36,6 +39,18 @@ from .settings import get_settings
 app = FastAPI(title='Travel Planner API')
 
 settings = get_settings()
+
+class RequestLogMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next) -> Response:
+        started = datetime.now(timezone.utc)
+        response = await call_next(request)
+        duration_ms = int((datetime.now(timezone.utc) - started).total_seconds() * 1000)
+        client_ip = request.headers.get("x-forwarded-for", request.client.host if request.client else "-")
+        print(f"[request] {client_ip} {request.method} {request.url.path} {response.status_code} {duration_ms}ms")
+        return response
+
+
+app.add_middleware(RequestLogMiddleware)
 
 
 async def send_email(to_email: str, subject: str, text: str) -> None:

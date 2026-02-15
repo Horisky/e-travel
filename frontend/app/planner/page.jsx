@@ -40,6 +40,13 @@ export default function PlannerPage() {
   const [historyItems, setHistoryItems] = useState([]);
 
   const apiBase = useMemo(() => process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000", []);
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, "0");
+    const d = String(now.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem("e_travel_token");
@@ -160,6 +167,10 @@ export default function PlannerPage() {
     }
     if (!startDate || !days) {
       setError("请填写开始日期和天数");
+      return;
+    }
+    if (startDate < todayStr) {
+      setError("开始日期不能早于今天");
       return;
     }
 
@@ -326,7 +337,7 @@ export default function PlannerPage() {
               </div>
               <div className="field">
                 <label>开始日期 *</label>
-                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                <input type="date" min={todayStr} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
               </div>
               <div className="inline">
                 <div className="field">
