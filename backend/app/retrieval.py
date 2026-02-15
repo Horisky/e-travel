@@ -50,9 +50,9 @@ async def retrieve_context(query: str, top_k: int = 4) -> List[Dict[str, Any]]:
     embedding = await _embed_text(query)
     vector_str = _to_pgvector(embedding)
 
-    with pool.connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
                 """
                 select id, title, source, content
                 from knowledge_docs
@@ -61,9 +61,9 @@ async def retrieve_context(query: str, top_k: int = 4) -> List[Dict[str, Any]]:
                 """,
                 (vector_str, top_k),
             )
-            rows = cur.fetchall() or []
+            rows = await cur.fetchall() or []
             if not rows:
-                cur.execute(
+                await cur.execute(
                     """
                     select id, title, source, content
                     from knowledge_docs
@@ -72,7 +72,7 @@ async def retrieve_context(query: str, top_k: int = 4) -> List[Dict[str, Any]]:
                     """,
                     (top_k,),
                 )
-                rows = cur.fetchall() or []
+                rows = await cur.fetchall() or []
 
     return [
         {
