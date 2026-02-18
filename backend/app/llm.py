@@ -1,3 +1,4 @@
+import contextvars
 import json
 import os
 import re
@@ -24,6 +25,12 @@ from .prompts import (
     RISK_USER,
     INTEGRATOR_SYSTEM,
     INTEGRATOR_USER,
+)
+from .dual_rate_memory import DualRateMemory
+
+_usage_collector: contextvars.ContextVar[List[int] | None] = contextvars.ContextVar(
+    "usage_collector",
+    default=None,
 )
 
 
@@ -52,8 +59,11 @@ async def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None, s
     rag_use_memory = settings.rag_use_memory
     rag_use_weather = settings.rag_use_weather
     mcp_enabled = settings.mcp_enabled
+    dual_rate_enabled = settings.dual_rate_enabled
 
     budget = req.budget_text or _budget_range(req)
+    collect_usage = audit_enabled
+    usage_token = _usage_collector.set([]) if collect_usage else None
     rag_context = ""
     memory_context = ""
     weather_context = ""
@@ -85,6 +95,8 @@ async def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None, s
                     rag_memory_hits = len(memory_chunks)
                     if audit_enabled:
                         print("[rag_memory_hits]", rag_memory_hits)
+                        memory_chars = sum(len(c.get("content") or "") for c in memory_chunks)
+                        print("[rag_memory_chars]", memory_chars)
                 if rag_use_weather:
                     rag_weather_source = "mcp-first" if mcp_enabled else "open-meteo"
                     weather_context = await retrieve_weather_context(req.destination, req.start_date, req.days)
@@ -110,6 +122,41 @@ async def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None, s
     elif audit_enabled:
         print("[rag_enabled]", "false")
         print("[rag_audit]", "kb_hits=0 memory_hits=0 weather=disabled source=disabled")
+
+    async def _summarize_for_dual_rate(text: str, max_tokens: int) -> str:
+        prompt = (
+            "Summarize the input into structured bullet points. "
+            "Only include facts explicitly present. "
+            "Do not invent new goals, tools, or steps. "
+            f"Keep it under ~{max_tokens} tokens.\n\n"
+            f"{text}"
+        )
+        return await _call_agent(
+            SYSTEM_GUARD,
+            prompt,
+            api_base,
+            api_key,
+            model,
+            response_format,
+            timeout_seconds,
+            provider,
+        )
+
+    if dual_rate_enabled and (rag_context or memory_context):
+        memory = DualRateMemory(
+            fast_tokens=settings.dual_rate_fast_tokens,
+            slow_tokens=settings.dual_rate_slow_tokens,
+            slow_every=settings.dual_rate_slow_every,
+            slow_importance=settings.dual_rate_slow_importance,
+            recent_keep=settings.dual_rate_recent_keep,
+        )
+        merged = "\n\n".join([c for c in [rag_context, memory_context] if c])
+        await memory.update(merged, _summarize_for_dual_rate)
+        dual_rate_context = memory.context()
+        rag_context = ""
+        memory_context = dual_rate_context
+        if audit_enabled:
+            print("[dual_rate]", f"chars_in={len(merged)} chars_out={len(dual_rate_context)}")
 
     # 1) Planner
     planner_prompt = PLANNER_USER.format(
@@ -232,7 +279,12 @@ async def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None, s
         )
         try:
             data = _extract_json_object(final_content)
-            return PlanResponse.model_validate(data)
+            result = PlanResponse.model_validate(data)
+            if collect_usage:
+                _log_usage_summary()
+            if usage_token is not None:
+                _usage_collector.reset(usage_token)
+            return result
         except (json.JSONDecodeError, ValidationError) as exc:
             last_error = exc
             integrator_messages.append(
@@ -240,6 +292,10 @@ async def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None, s
                 f"{exc}\n"
                 "Return ONLY valid JSON that matches the schema."
             )
+    if collect_usage:
+        _log_usage_summary()
+    if usage_token is not None:
+        _usage_collector.reset(usage_token)
     raise RuntimeError(f"LLM output invalid: {last_error}")
 
 
@@ -270,6 +326,15 @@ def _budget_range(req: PlanRequest) -> str:
         return f"<= {req.budget_max}"
     return "???"
 
+
+def _log_usage_summary() -> None:
+    collector = _usage_collector.get()
+    if not collector:
+        return
+    total = sum(collector)
+    avg = total / len(collector)
+    print("[llm_avg_tokens]", f"calls={len(collector)} total_tokens={total} avg_total_tokens={avg:.1f}")
+
 def _maybe_log_usage(data: Dict[str, Any]) -> None:
     enabled = os.getenv("LLM_USAGE_LOG", "false").lower() == "true"
     if not enabled:
@@ -278,6 +343,11 @@ def _maybe_log_usage(data: Dict[str, Any]) -> None:
     if usage is None:
         return
     print("[llm_usage]", usage)
+    collector = _usage_collector.get()
+    if collector is not None:
+        total_tokens = usage.get("total_tokens")
+        if isinstance(total_tokens, int):
+            collector.append(total_tokens)
 
 
 async def _call_openai(

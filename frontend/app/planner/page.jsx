@@ -79,6 +79,23 @@ export default function PlannerPage() {
     }
   };
 
+  const deleteHistoryItem = async (itemId, event) => {
+    event?.stopPropagation?.();
+    if (!itemId || !token) return;
+    const confirmed = window.confirm("确认删除此条历史记录？删除后不可恢复。");
+    if (!confirmed) return;
+    try {
+      const resp = await fetch(`${apiBase}/api/me/search-history/${itemId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!resp.ok) return;
+      setHistoryItems((prev) => prev.filter((item) => item.id !== itemId));
+    } catch (e) {
+      // ignore
+    }
+  };
+
   const fetchPreferences = async (jwt) => {
     try {
       const resp = await fetch(`${apiBase}/api/me/preferences`, {
@@ -411,17 +428,25 @@ export default function PlannerPage() {
             ) : (
               <div className={`history-list ${data ? "with-current" : ""}`}>
                 {historyItems.map((item) => (
-                  <button
+                  <div
                     key={item.id}
-                    type="button"
                     className="history-item"
                     onClick={() => applyHistory(item)}
+                    role="button"
+                    tabIndex={0}
                   >
                     <div className="history-title">{item.query?.origin || "出发地"} → {item.query?.destination || "目的地"}</div>
                     <div className="history-meta">{item.query?.start_date || "未填日期"} · {item.query?.days || 0} 天 · {item.query?.travelers || 1} 人</div>
                     {item.query?.budget_text ? <div className="history-meta">预算：{item.query?.budget_text}</div> : null}
                     <div className="history-meta">搜索时间：{formatHistoryTime(item.created_at)}</div>
-                  </button>
+                    <button
+                      className="history-delete"
+                      type="button"
+                      onClick={(event) => deleteHistoryItem(item.id, event)}
+                    >
+                      删除
+                    </button>
+                  </div>
                 ))}
               </div>
             )}

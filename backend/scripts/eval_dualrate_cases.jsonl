@@ -1,0 +1,6 @@
+{"origin":"北京","destination":"米兰","start_date":"2026-03-10","days":3,"travelers":2,"budget_text":"中等预算","preferences":["美食探索","城市漫游"],"pace":"适中","constraints":["不去太累","避开人多"]}
+{"origin":"上海","destination":"东京","start_date":"2026-04-15","days":4,"travelers":1,"budget_text":"经济型","preferences":["历史文化","小众路线"],"pace":"慢","constraints":["不去博物馆太多"]}
+{"origin":"广州","destination":"成都","start_date":"2026-03-01","days":3,"travelers":2,"budget_text":"3-6k","preferences":["美食探索","自然风光"],"pace":"适中","constraints":["不要太早起"]}
+{"origin":"深圳","destination":"曼谷","start_date":"2026-05-20","days":5,"travelers":2,"budget_text":"中高预算","preferences":["美食探索","亲子友好"],"pace":"慢","constraints":["避免烈日暴晒"]}
+{"origin":"杭州","destination":"厦门","start_date":"2026-02-25","days":3,"travelers":3,"budget_text":"中等预算","preferences":["拍照打卡","自然风光"],"pace":"适中","constraints":["不去太远"]}
+

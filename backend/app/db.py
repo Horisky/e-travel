@@ -258,6 +258,19 @@ async def load_search_history(user_id: str, limit: int = 10) -> list[Dict[str, A
             return items
 
 
+async def delete_search_history_item(user_id: str, history_id: str) -> bool:
+    pool = await get_pool()
+    if pool is None:
+        return False
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "delete from user_search_history where id=%s and user_id=%s",
+                (history_id, user_id),
+            )
+            return cur.rowcount > 0
+
+
 async def save_user_memory_doc(user_id: str, title: str, source: str, content: str, embedding: list[float]) -> None:
     pool = await get_pool()
     if pool is None:

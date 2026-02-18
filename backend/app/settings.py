@@ -32,6 +32,12 @@ class Settings(BaseModel):
     rag_use_memory: bool
     rag_use_weather: bool
     mcp_enabled: bool
+    dual_rate_enabled: bool
+    dual_rate_fast_tokens: int
+    dual_rate_slow_tokens: int
+    dual_rate_slow_every: int
+    dual_rate_slow_importance: float
+    dual_rate_recent_keep: int
 
 
 @lru_cache
@@ -74,4 +80,10 @@ def get_settings() -> Settings:
         rag_use_memory=_env_bool("RAG_USE_MEMORY", "true"),
         rag_use_weather=_env_bool("RAG_USE_WEATHER", "true"),
         mcp_enabled=_env_bool("MCP_ENABLED", "false"),
+        dual_rate_enabled=_env_bool("DUAL_RATE_ENABLED", "false"),
+        dual_rate_fast_tokens=int(os.getenv("DUAL_RATE_FAST_TOKENS", "250")),
+        dual_rate_slow_tokens=int(os.getenv("DUAL_RATE_SLOW_TOKENS", "300")),
+        dual_rate_slow_every=int(os.getenv("DUAL_RATE_SLOW_EVERY", "4")),
+        dual_rate_slow_importance=float(os.getenv("DUAL_RATE_SLOW_IMPORTANCE", "3.0")),
+        dual_rate_recent_keep=int(os.getenv("DUAL_RATE_RECENT_KEEP", "1")),
     )

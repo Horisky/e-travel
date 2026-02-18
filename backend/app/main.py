@@ -210,6 +210,14 @@ async def get_search_history(user: dict = Depends(current_user_dep)):
     return await db.load_search_history(user["id"])
 
 
+@app.delete('/api/me/search-history/{history_id}')
+async def delete_search_history(history_id: str, user: dict = Depends(current_user_dep)):
+    deleted = await db.delete_search_history_item(user["id"], history_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="History item not found")
+    return {"status": "ok"}
+
+
 @app.put('/api/me/preferences')
 async def update_preferences(req: PreferencesRequest, user: dict = Depends(current_user_dep)):
     prefs = req.model_dump()

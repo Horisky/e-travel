@@ -95,6 +95,7 @@ async def retrieve_user_memory_context(user_id: str, query: str, top_k: int = 4)
 async def save_user_memory_from_plan(user_id: str, query: Dict[str, Any], result: Dict[str, Any]) -> None:
     if not user_id:
         return
+    audit_enabled = os.getenv("AGENT_AUDIT_LOG", "false").lower() == "true"
 
     route = f"{query.get('origin') or '出发地'} -> {query.get('destination') or '目的地'}"
     warnings = result.get("warnings") or []
@@ -116,11 +117,15 @@ async def save_user_memory_from_plan(user_id: str, query: Dict[str, Any], result
         )
 
     content = "\n".join(summary_lines)
+    title = f"历史偏好记忆: {route}"
+    if audit_enabled:
+        lines = content.count("\n") + 1
+        print("[memory_write]", f"title={title} chars={len(content)} lines={lines}")
     embedding = await _embed_text(content)
 
     await db.save_user_memory_doc(
         user_id=user_id,
-        title=f"历史偏好记忆: {route}",
+        title=title,
         source="user_search_history",
         content=content,
         embedding=embedding,
