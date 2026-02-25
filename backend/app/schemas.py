@@ -13,6 +13,7 @@ class PlanRequest(BaseModel):
     preferences: List[str] = Field(default_factory=list, description='??')
     pace: str = Field(default='??', description='??')
     constraints: List[str] = Field(default_factory=list, description='??')
+    language: Optional[str] = Field(default=None, description='?? (zh/en)')
 
 class Destination(BaseModel):
     name: str

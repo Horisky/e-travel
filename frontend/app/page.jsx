@@ -2,9 +2,11 @@
 
 import { useRef } from "react";
 import LoginPage from "./login/page";
+import { useLanguage } from "./components/LanguageProvider";
 
 export default function Home() {
   const loginRef = useRef(null);
+  const { t } = useLanguage();
 
   const scrollToLogin = () => {
     if (loginRef.current) {
@@ -20,12 +22,12 @@ export default function Home() {
         </div>
         <div className="landing-copy">
           <p className="eyebrow">AI Travel Planner</p>
-          <h1>一键生成你的专属旅行计划</h1>
+          <h1>{t("landing.title")}</h1>
           <p className="subtext">
-            输入出发地、预算和偏好，立刻得到 Top 3 目的地推荐与逐日行程安排。
+            {t("landing.subtitle")}
           </p>
           <button className="scroll-cta" type="button" onClick={scrollToLogin}>
-            开始计划你的旅行 <span className="arrow">→</span>
+            {t("landing.cta")} <span className="arrow">→</span>
           </button>
         </div>
       </section>
@@ -33,8 +35,8 @@ export default function Home() {
         <LoginPage />
       </section>
       <footer className="landing-footer">
-        <a href="/faq">FAQ</a>
-        <a href="/about">关于我们</a>
+        <a href="/faq">{t("nav.faq")}</a>
+        <a href="/about">{t("nav.about")}</a>
       </footer>
     </div>
   );

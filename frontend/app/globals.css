@@ -29,6 +29,37 @@ body {
   min-height: 100vh;
 }
 
+.lang-toggle {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  z-index: 1000;
+  display: inline-flex;
+  gap: 6px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(6px);
+}
+
+.lang-toggle button {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.lang-toggle button.active {
+  background: var(--accent-2);
+  color: #fff;
+}
+
 .info-page {
   min-height: 100vh;
   padding: 64px 6vw 48px;

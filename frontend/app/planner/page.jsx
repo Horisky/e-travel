@@ -1,23 +1,26 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useLanguage } from "../components/LanguageProvider";
 
 const DEFAULT_PREFS = [
-  "自然风光",
-  "历史文化",
-  "城市漫游",
-  "美食探索",
-  "亲子友好",
-  "户外活动",
-  "小众路线",
-  "拍照打卡"
+  { zh: "自然风光", en: "Natural scenery" },
+  { zh: "历史文化", en: "History & culture" },
+  { zh: "城市漫游", en: "City walk" },
+  { zh: "美食探索", en: "Food exploration" },
+  { zh: "亲子友好", en: "Family friendly" },
+  { zh: "户外活动", en: "Outdoor activities" },
+  { zh: "小众路线", en: "Offbeat routes" },
+  { zh: "拍照打卡", en: "Photo spots" }
 ];
 
-const DEFAULT_CONSTRAINTS = "不去太累, 避开人多";
+const DEFAULT_CONSTRAINTS_ZH = "不去太累, 避开人多";
+const DEFAULT_CONSTRAINTS_EN = "Not too tiring, avoid crowds";
 
 export default function PlannerPage() {
   const router = useRouter();
+  const { t, lang } = useLanguage();
   const [origin, setOrigin] = useState("");
   const [destination, setDestination] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -28,7 +31,7 @@ export default function PlannerPage() {
   const [budgetText, setBudgetText] = useState("");
   const [pace, setPace] = useState("适中");
   const [preferences, setPreferences] = useState([]);
-  const [constraintsText, setConstraintsText] = useState(DEFAULT_CONSTRAINTS);
+  const [constraintsText, setConstraintsText] = useState(DEFAULT_CONSTRAINTS_ZH);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
@@ -47,6 +50,21 @@ export default function PlannerPage() {
     const d = String(now.getDate()).padStart(2, "0");
     return `${y}-${m}-${d}`;
   }, []);
+
+  useEffect(() => {
+    setConstraintsText((prev) => {
+      if (!prev || prev === DEFAULT_CONSTRAINTS_ZH || prev === DEFAULT_CONSTRAINTS_EN) {
+        return lang === "zh" ? DEFAULT_CONSTRAINTS_ZH : DEFAULT_CONSTRAINTS_EN;
+      }
+      return prev;
+    });
+    if (data) {
+      setData(null);
+      setTopDestinations([]);
+      setActiveDestination("");
+      setShowForm(true);
+    }
+  }, [lang]);
 
   useEffect(() => {
     const saved = localStorage.getItem("e_travel_token");
@@ -82,7 +100,7 @@ export default function PlannerPage() {
   const deleteHistoryItem = async (itemId, event) => {
     event?.stopPropagation?.();
     if (!itemId || !token) return;
-    const confirmed = window.confirm("确认删除此条历史记录？删除后不可恢复。");
+    const confirmed = window.confirm(t("ui.deleteConfirm"));
     if (!confirmed) return;
     try {
       const resp = await fetch(`${apiBase}/api/me/search-history/${itemId}`, {
@@ -152,7 +170,7 @@ export default function PlannerPage() {
     setBudgetText(query.budget_text || "");
     setPreferences(query.preferences || []);
     setPace(query.pace || "适中");
-    setConstraintsText((query.constraints || []).join(", ") || DEFAULT_CONSTRAINTS);
+    setConstraintsText((query.constraints || []).join(", ") || (lang === "zh" ? DEFAULT_CONSTRAINTS_ZH : DEFAULT_CONSTRAINTS_EN));
     if (item?.result) {
       setData(item.result);
       const nextTop = buildTopDestinations(item.result.top_destinations, query.destination);
@@ -164,10 +182,10 @@ export default function PlannerPage() {
   };
 
   const formatHistoryTime = (value) => {
-    if (!value) return "未知时间";
+    if (!value) return t("ui.unknownTime");
     const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "未知时间";
-    return date.toLocaleString("zh-CN");
+    if (Number.isNaN(date.getTime())) return t("ui.unknownTime");
+    return date.toLocaleString(lang === "zh" ? "zh-CN" : "en-US");
   };
 
   const generatePlan = async (forcedDestination) => {
@@ -179,15 +197,15 @@ export default function PlannerPage() {
     }
 
     if (!origin || !destination) {
-      setError("请填写出发地和目的地");
+      setError(t("planner.errorMissing"));
       return;
     }
     if (!startDate || !days) {
-      setError("请填写开始日期和天数");
+      setError(t("planner.errorDate"));
       return;
     }
     if (startDate < todayStr) {
-      setError("开始日期不能早于今天");
+      setError(t("planner.errorPast"));
       return;
     }
 
@@ -202,7 +220,8 @@ export default function PlannerPage() {
       budget_text: budgetText || null,
       preferences,
       pace,
-      constraints: buildConstraints()
+      constraints: buildConstraints(),
+      language: lang
     };
 
     setLoading(true);
@@ -215,7 +234,7 @@ export default function PlannerPage() {
 
       if (!resp.ok) {
         const body = await resp.json().catch(() => ({}));
-        throw new Error(body.detail || "请求失败");
+        throw new Error(body.detail || t("planner.errorFailed"));
       }
 
       const result = await resp.json();
@@ -226,7 +245,7 @@ export default function PlannerPage() {
       setShowForm(false);
       fetchHistory();
     } catch (err) {
-      setError(err.message || "生成行程失败，请稍后重试");
+      setError(err.message || t("planner.errorFailed"));
     } finally {
       setLoading(false);
     }
@@ -235,8 +254,8 @@ export default function PlannerPage() {
   const resultPanel = (
     <section className="panel result-panel">
       <div className="result-header">
-        <h2>行程结果</h2>
-        {loading ? <span className="hint">正在生成中，请稍等…</span> : null}
+        <h2>{t("planner.result")}</h2>
+        {loading ? <span className="hint">{t("ui.loading")}</span> : null}
         {data ? (
           <div className="result-actions">
             <button
@@ -250,19 +269,19 @@ export default function PlannerPage() {
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
             >
-              返回
+              {t("ui.back")}
             </button>
-            <button className="ghost-button" type="button" onClick={() => { setShowForm(true); window.scrollTo({ top: 0, behavior: "smooth" }); }}>修改需求</button>
+            <button className="ghost-button" type="button" onClick={() => { setShowForm(true); window.scrollTo({ top: 0, behavior: "smooth" }); }}>{t("ui.edit")}</button>
           </div>
         ) : null}
       </div>
 
       {!data ? (
-        <div className="empty"><p>暂无结果</p><span>填写左侧表单开始规划旅行</span></div>
+        <div className="empty"><p>{t("ui.empty")}</p><span>{t("ui.emptyHint")}</span></div>
       ) : (
         <div className="results">
           <section>
-            <h3>Top 推荐目的地</h3>
+            <h3>{t("planner.topDestinations")}</h3>
             <div className="cards">
               {(topDestinations.length ? topDestinations : data.top_destinations).map((item, idx) => (
                 <article
@@ -273,27 +292,27 @@ export default function PlannerPage() {
                 >
                   <h4>{item.name}</h4>
                   <ul>{item.reasons.map((reason, i) => (<li key={i}>{reason}</li>))}</ul>
-                  <p className="meta">预算：{item.budget_range}</p>
-                  <p className="meta">交通：{item.transport}</p>
-                  <p className="meta">最佳季节：{item.best_season}</p>
-                  <span className="chip mini">点击生成行程</span>
+                  <p className="meta">{lang === "zh" ? "预算：" : "Budget: "}{item.budget_range}</p>
+                  <p className="meta">{lang === "zh" ? "交通：" : "Transport: "}{item.transport}</p>
+                  <p className="meta">{lang === "zh" ? "最佳季节：" : "Best season: "}{item.best_season}</p>
+                  <span className="chip mini">{t("planner.clickToGenerate")}</span>
                 </article>
               ))}
             </div>
           </section>
           <section>
-            <h3>每日行程{activeDestination || destination || origin ? ` · ${origin || "出发地"} → ${activeDestination || destination || "目的地"}` : ""}</h3>
+            <h3>{t("planner.dailyPlan")}{activeDestination || destination || origin ? ` · ${origin || (lang === "zh" ? "出发地" : "Origin")} → ${activeDestination || destination || (lang === "zh" ? "目的地" : "Destination")}` : ""}</h3>
             <div className="day-grid">
               {data.daily_plan.map((day) => (
                 <article key={day.day} className="day-card">
-                  <h4>Day {day.day}</h4>
+                  <h4>{t("planner.day")} {day.day}</h4>
                   {[{ label: "上午", block: day.morning }, { label: "下午", block: day.afternoon }, { label: "晚上", block: day.evening }].map((segment) => (
                     <div key={segment.label} className="segment">
-                      <div className="segment-title"><span>{segment.label}</span><strong>{segment.block.title}</strong></div>
-                      <p>交通：{segment.block.transport}</p>
-                      <p>时长：{segment.block.duration_hours} 小时</p>
-                      <p>费用：{segment.block.cost_range}</p>
-                      {segment.block.alternatives.length ? (<p className="alt">备选：{segment.block.alternatives.join(" / ")}</p>) : null}
+                      <div className="segment-title"><span>{lang === "zh" ? segment.label : (segment.label === "上午" ? "Morning" : segment.label === "下午" ? "Afternoon" : "Evening")}</span><strong>{segment.block.title}</strong></div>
+                      <p>{t("planner.transport")}：{segment.block.transport}</p>
+                      <p>{t("planner.duration")}：{segment.block.duration_hours} {lang === "zh" ? "小时" : "hrs"}</p>
+                      <p>{t("planner.cost")}：{segment.block.cost_range}</p>
+                      {segment.block.alternatives.length ? (<p className="alt">{t("planner.alt")}：{segment.block.alternatives.join(" / ")}</p>) : null}
                     </div>
                   ))}
                 </article>
@@ -301,17 +320,17 @@ export default function PlannerPage() {
             </div>
           </section>
           <section>
-            <h3>预算明细</h3>
+            <h3>{t("planner.budget")}</h3>
             <div className="budget-grid">
-              <div><span>交通</span><strong>{data.budget_breakdown.transport}</strong></div>
-              <div><span>住宿</span><strong>{data.budget_breakdown.lodging}</strong></div>
-              <div><span>餐饮</span><strong>{data.budget_breakdown.food}</strong></div>
-              <div><span>门票</span><strong>{data.budget_breakdown.tickets}</strong></div>
-              <div><span>市内交通</span><strong>{data.budget_breakdown.local_transport}</strong></div>
+              <div><span>{lang === "zh" ? "交通" : "Transport"}</span><strong>{data.budget_breakdown.transport}</strong></div>
+              <div><span>{lang === "zh" ? "住宿" : "Lodging"}</span><strong>{data.budget_breakdown.lodging}</strong></div>
+              <div><span>{lang === "zh" ? "餐饮" : "Food"}</span><strong>{data.budget_breakdown.food}</strong></div>
+              <div><span>{lang === "zh" ? "门票" : "Tickets"}</span><strong>{data.budget_breakdown.tickets}</strong></div>
+              <div><span>{lang === "zh" ? "市内交通" : "Local transport"}</span><strong>{data.budget_breakdown.local_transport}</strong></div>
             </div>
           </section>
           {data.warnings?.length ? (
-            <section><h3>注意事项</h3><ul className="warnings">{data.warnings.map((warn, idx) => (<li key={idx}>{warn}</li>))}</ul></section>
+            <section><h3>{t("planner.warnings")}</h3><ul className="warnings">{data.warnings.map((warn, idx) => (<li key={idx}>{warn}</li>))}</ul></section>
           ) : null}
         </div>
       )}
@@ -323,17 +342,17 @@ export default function PlannerPage() {
       <header className="hero">
         <div className="hero-copy">
           <p className="eyebrow">AI Travel Planner</p>
-          <h1>智能生成你的专属旅行计划</h1>
-          <p className="subtext">输入需求，立刻获得 Top 3 目的地与详细行程</p>
+          <h1>{t("planner.heroTitle")}</h1>
+          <p className="subtext">{t("planner.heroSubtitle")}</p>
           <div className="hero-actions">
             <span>{userEmail}</span>
-            <button className="ghost-button" type="button" onClick={logout}>退出</button>
+            <button className="ghost-button" type="button" onClick={logout}>{t("ui.logout")}</button>
           </div>
         </div>
         <div className="hero-card">
-          <div className="stat"><span>Top 3</span><strong>推荐目的地</strong></div>
-          <div className="stat"><span>Day 1 - Day N</span><strong>逐日行程</strong></div>
-          <div className="stat"><span>预算</span><strong>低 / 中 / 高</strong></div>
+          <div className="stat"><span>Top 3</span><strong>{lang === "zh" ? "推荐目的地" : "Top destinations"}</strong></div>
+          <div className="stat"><span>Day 1 - Day N</span><strong>{lang === "zh" ? "逐日行程" : "Daily plan"}</strong></div>
+          <div className="stat"><span>{lang === "zh" ? "预算" : "Budget"}</span><strong>{lang === "zh" ? "低 / 中 / 高" : "Low / Mid / High"}</strong></div>
         </div>
       </header>
 
@@ -341,67 +360,67 @@ export default function PlannerPage() {
         {showForm ? (
           <section className="panel form-panel">
             <div className="result-header">
-              <h2>行程需求</h2>
+              <h2>{t("planner.requirements")}</h2>
             </div>
             <form onSubmit={(e) => { e.preventDefault(); generatePlan(null); }} className="form">
               <div className="field">
-                <label>出发城市 *</label>
-                <input value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder="例如 北京" />
+                <label>{t("planner.origin")}</label>
+                <input value={origin} onChange={(e) => setOrigin(e.target.value)} placeholder={t("planner.placeholderOrigin")} />
               </div>
               <div className="field">
-                <label>目的地 *</label>
-                <input value={destination} onChange={(e) => setDestination(e.target.value)} placeholder="例如 上海 / 杭州" />
+                <label>{t("planner.destination")}</label>
+                <input value={destination} onChange={(e) => setDestination(e.target.value)} placeholder={t("planner.placeholderDestination")} />
               </div>
               <div className="field">
-                <label>开始日期 *</label>
-                <input type="date" min={todayStr} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                <label>{t("planner.startDate")}</label>
+                <input type="date" lang={lang === "zh" ? "zh-CN" : "en"} min={todayStr} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
               </div>
               <div className="inline">
                 <div className="field">
-                  <label>天数 *</label>
+                  <label>{t("planner.days")}</label>
                   <input type="number" min="1" max="30" value={days} onChange={(e) => setDays(e.target.value)} />
                 </div>
                 <div className="field">
-                  <label>人数</label>
+                  <label>{t("planner.travelers")}</label>
                   <input type="number" min="1" max="20" value={travelers} onChange={(e) => setTravelers(e.target.value)} />
                 </div>
               </div>
               <div className="inline">
                 <div className="field">
-                  <label>最低预算</label>
-                  <input type="number" min="0" value={budgetMin} onChange={(e) => setBudgetMin(e.target.value)} placeholder="如 3000" />
+                  <label>{t("planner.budgetMin")}</label>
+                  <input type="number" min="0" value={budgetMin} onChange={(e) => setBudgetMin(e.target.value)} placeholder={lang === "zh" ? "如 3000" : "e.g. 3000"} />
                 </div>
                 <div className="field">
-                  <label>最高预算</label>
-                  <input type="number" min="0" value={budgetMax} onChange={(e) => setBudgetMax(e.target.value)} placeholder="如 6000" />
+                  <label>{t("planner.budgetMax")}</label>
+                  <input type="number" min="0" value={budgetMax} onChange={(e) => setBudgetMax(e.target.value)} placeholder={lang === "zh" ? "如 6000" : "e.g. 6000"} />
                 </div>
               </div>
               <div className="field">
-                <label>预算描述</label>
-                <input value={budgetText} onChange={(e) => setBudgetText(e.target.value)} placeholder="例如 3-6k" />
+                <label>{t("planner.budgetText")}</label>
+                <input value={budgetText} onChange={(e) => setBudgetText(e.target.value)} placeholder={t("planner.placeholderBudget")} />
               </div>
               <div className="field">
-                <label>旅行偏好</label>
+                <label>{t("planner.preferences")}</label>
                 <div className="chips">
                   {DEFAULT_PREFS.map((pref) => (
-                    <button key={pref} type="button" className={preferences.includes(pref) ? "chip active" : "chip"} onClick={() => togglePreference(pref)}>{pref}</button>
+                    <button key={pref.zh} type="button" className={preferences.includes(pref.zh) ? "chip active" : "chip"} onClick={() => togglePreference(pref.zh)}>{lang === "zh" ? pref.zh : pref.en}</button>
                   ))}
                 </div>
               </div>
               <div className="field">
-                <label>节奏</label>
+                <label>{t("planner.pace")}</label>
                 <select value={pace} onChange={(e) => setPace(e.target.value)}>
-                  <option value="慢">慢</option>
-                  <option value="适中">适中</option>
-                  <option value="快">快</option>
+                  <option value="慢">{t("pace.slow")}</option>
+                  <option value="适中">{t("pace.normal")}</option>
+                  <option value="快">{t("pace.fast")}</option>
                 </select>
               </div>
               <div className="field">
-                <label>其他限制</label>
+                <label>{t("planner.constraints")}</label>
                 <textarea value={constraintsText} onChange={(e) => setConstraintsText(e.target.value)} rows={3} />
               </div>
-              <button className="submit" type="submit" disabled={loading}>{loading ? "生成中..." : "生成行程"}</button>
-              {loading ? <p className="hint">正在生成中，请稍等…</p> : null}
+              <button className="submit" type="submit" disabled={loading}>{loading ? t("ui.submitting") : t("ui.submit")}</button>
+              {loading ? <p className="hint">{t("ui.loading")}</p> : null}
               {error ? <p className="error">{error}</p> : null}
             </form>
           </section>
@@ -410,21 +429,21 @@ export default function PlannerPage() {
         {showForm ? (
           <section className="panel history-panel">
             <div className="result-header">
-              <h2>历史搜索</h2>
-              <span className="hint">最多保留 10 条历史搜索</span>
+              <h2>{t("ui.history")}</h2>
+              <span className="hint">{t("ui.historyHint")}</span>
             </div>
             {data ? (
               <div className="history-current">
-                <div className="history-label">当前搜索</div>
+                <div className="history-label">{t("ui.currentSearch")}</div>
                 <div className="history-item static">
-                  <div className="history-title">{origin || "出发地"} → {destination || "目的地"}</div>
-                  <div className="history-meta">{startDate || "未填日期"} · {days || 0} 天 · {travelers || 1} 人</div>
-                  {budgetText ? <div className="history-meta">预算：{budgetText}</div> : null}
+                  <div className="history-title">{origin || (lang === "zh" ? "出发地" : "Origin")} → {destination || (lang === "zh" ? "目的地" : "Destination")}</div>
+                  <div className="history-meta">{startDate || (lang === "zh" ? "未填日期" : "No date")} · {days || 0} {lang === "zh" ? "天" : "days"} · {travelers || 1} {lang === "zh" ? "人" : "people"}</div>
+                  {budgetText ? <div className="history-meta">{lang === "zh" ? "预算：" : "Budget: "}{budgetText}</div> : null}
                 </div>
               </div>
             ) : null}
             {!historyItems.length ? (
-              <div className="empty"><p>暂无历史</p><span>生成行程后会自动保存</span></div>
+              <div className="empty"><p>{t("ui.noHistory")}</p><span>{t("ui.noHistoryHint")}</span></div>
             ) : (
               <div className={`history-list ${data ? "with-current" : ""}`}>
                 {historyItems.map((item) => (
@@ -435,16 +454,16 @@ export default function PlannerPage() {
                     role="button"
                     tabIndex={0}
                   >
-                    <div className="history-title">{item.query?.origin || "出发地"} → {item.query?.destination || "目的地"}</div>
-                    <div className="history-meta">{item.query?.start_date || "未填日期"} · {item.query?.days || 0} 天 · {item.query?.travelers || 1} 人</div>
-                    {item.query?.budget_text ? <div className="history-meta">预算：{item.query?.budget_text}</div> : null}
-                    <div className="history-meta">搜索时间：{formatHistoryTime(item.created_at)}</div>
+                    <div className="history-title">{item.query?.origin || (lang === "zh" ? "出发地" : "Origin")} → {item.query?.destination || (lang === "zh" ? "目的地" : "Destination")}</div>
+                    <div className="history-meta">{item.query?.start_date || (lang === "zh" ? "未填日期" : "No date")} · {item.query?.days || 0} {lang === "zh" ? "天" : "days"} · {item.query?.travelers || 1} {lang === "zh" ? "人" : "people"}</div>
+                    {item.query?.budget_text ? <div className="history-meta">{lang === "zh" ? "预算：" : "Budget: "}{item.query?.budget_text}</div> : null}
+                    <div className="history-meta">{t("ui.searchTime")}：{formatHistoryTime(item.created_at)}</div>
                     <button
                       className="history-delete"
                       type="button"
                       onClick={(event) => deleteHistoryItem(item.id, event)}
                     >
-                      删除
+                      {t("ui.delete")}
                     </button>
                   </div>
                 ))}
@@ -461,10 +480,10 @@ export default function PlannerPage() {
       <footer className="footer">
         <span>Backend: {apiBase}</span>
         <span className="footer-links">
-          <a href="/faq">FAQ</a>
-          <a href="/about">关于我们</a>
+          <a href="/faq">{t("nav.faq")}</a>
+          <a href="/about">{t("nav.about")}</a>
         </span>
-        <span className="footer-version">E-travel——AI一键生成旅行规划系统 V1.0</span>
+        <span className="footer-version">{t("footer.version")}</span>
       </footer>
     </div>
   );

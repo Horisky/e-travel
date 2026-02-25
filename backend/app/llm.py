@@ -62,6 +62,13 @@ async def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None, s
     dual_rate_enabled = settings.dual_rate_enabled
 
     budget = req.budget_text or _budget_range(req)
+    language = "Chinese"
+    if req.language:
+        lowered = req.language.lower()
+        if lowered.startswith("en"):
+            language = "English"
+        elif lowered.startswith("zh"):
+            language = "Chinese"
     collect_usage = audit_enabled
     usage_token = _usage_collector.set([]) if collect_usage else None
     rag_context = ""
@@ -192,7 +199,7 @@ async def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None, s
         )
 
     plan_skeleton = await _run_agent_with_retry(
-        system_prompt=PLANNER_SYSTEM,
+        system_prompt=PLANNER_SYSTEM.format(language=language),
         user_prompt=planner_prompt,
         api_base=api_base,
         api_key=api_key,
@@ -214,7 +221,7 @@ async def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None, s
             travelers=req.travelers,
         )
         budget_info = await _run_agent_with_retry(
-            system_prompt=BUDGET_SYSTEM,
+            system_prompt=BUDGET_SYSTEM.format(language=language),
             user_prompt=budget_prompt,
             api_base=api_base,
             api_key=api_key,
@@ -232,7 +239,7 @@ async def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None, s
             plan_skeleton=json.dumps(plan_skeleton, ensure_ascii=False),
         )
         risk_info = await _run_agent_with_retry(
-            system_prompt=RISK_SYSTEM,
+            system_prompt=RISK_SYSTEM.format(language=language),
             user_prompt=risk_prompt,
             api_base=api_base,
             api_key=api_key,
@@ -261,6 +268,7 @@ async def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None, s
             budget_info=json.dumps(budget_info, ensure_ascii=False),
             risk_info=json.dumps(risk_info, ensure_ascii=False),
             schema=schema,
+            language=language,
         )
 
         if integrator_messages:
@@ -268,7 +276,7 @@ async def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None, s
             integrator_prompt = integrator_messages[-1]
 
         final_content = await _call_agent(
-            INTEGRATOR_SYSTEM,
+            INTEGRATOR_SYSTEM.format(language=language),
             integrator_prompt,
             api_base,
             api_key,
@@ -303,7 +311,15 @@ async def generate_plan_with_llm(req: PlanRequest, user_id: str | None = None, s
 def _build_user_prompt(req: PlanRequest) -> str:
     budget = req.budget_text or _budget_range(req)
     schema = json.dumps(PlanResponse.model_json_schema(), ensure_ascii=True)
+    language = "Chinese"
+    if req.language:
+        lowered = req.language.lower()
+        if lowered.startswith("en"):
+            language = "English"
+        elif lowered.startswith("zh"):
+            language = "Chinese"
     return USER_TEMPLATE.format(
+        language=language,
         origin=req.origin or "???",
         destination=req.destination or "???",
         start_date=req.start_date,

@@ -7,7 +7,7 @@ You are a travel planning assistant. Follow these rules:
 """
 
 USER_TEMPLATE = """
-Generate a travel plan in Chinese based on:
+Generate a travel plan in {language} based on:
 - origin: {origin}
 - destination (optional): {destination}
 - start_date: {start_date}
@@ -34,7 +34,7 @@ Rules:
 1) Use only the user input.
 2) Output JSON only.
 3) Keep structure minimal: summary + daily skeleton.
-4) Output must be in Chinese.
+4) Output must be in {language}, even if sources are in another language.
 """
 
 PLANNER_USER = """
@@ -59,7 +59,7 @@ You are the Budget Agent. Your job is to estimate costs and propose alternatives
 Rules:
 1) Use the Planner output and user input.
 2) Output JSON only.
-3) Output must be in Chinese.
+3) Output must be in {language}, even if sources are in another language.
 """
 
 BUDGET_USER = """
@@ -80,7 +80,7 @@ You are the Risk Agent. Your job is to find conflicts, risks, or impractical par
 Rules:
 1) Use the Planner output and user input.
 2) Output JSON only.
-3) Output must be in Chinese.
+3) Output must be in {language}, even if sources are in another language.
 """
 
 RISK_USER = """
@@ -97,7 +97,7 @@ You are the Integrator Agent. Your job is to merge planner + budget + risk outpu
 Rules:
 1) Output strict JSON for the final response schema.
 2) Resolve conflicts and apply fixes.
-3) Output must be in Chinese.
+3) Output must be in {language}, even if sources are in another language.
 """
 
 INTEGRATOR_USER = """
@@ -112,5 +112,5 @@ Rules:
 - top_destinations must include exactly 3 alternative destinations and must NOT include the provided destination.
 
 Return final JSON that matches the schema exactly.
-Output must be in Chinese.
+Output must be in {language}.
 """
