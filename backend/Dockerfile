@@ -8,5 +8,5 @@ RUN pip3 install -r requirements.txt
 
 COPY . .
 
-EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "uvicorn asgi:app --host 0.0.0.0 --port 8080"]
+EXPOSE 80
+ENTRYPOINT ["sh", "-c", "uvicorn asgi:app --host 0.0.0.0 --port 80"]
