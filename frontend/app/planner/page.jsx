@@ -434,22 +434,6 @@ export default function PlannerPage() {
     setTimeout(() => win.print(), 400);
   };
 
-  const sharePlan = async () => {
-    if (!data) return;
-    const text = buildExportText();
-    const title = buildExportTitle();
-    try {
-      if (navigator.share) {
-        await navigator.share({ title, text });
-        return;
-      }
-      await navigator.clipboard.writeText(`${title}\n\n${text}`);
-      alert(t("ui.shareCopied"));
-    } catch (e) {
-      alert(t("ui.shareFailed"));
-    }
-  };
-
   const generatePlan = async (forcedDestination) => {
     if (loading) return;
     setError("");
@@ -536,7 +520,6 @@ export default function PlannerPage() {
             <button className="ghost-button" type="button" onClick={() => { setShowForm(true); window.scrollTo({ top: 0, behavior: "smooth" }); }}>{t("ui.edit")}</button>
             <div className="result-tools">
               <button className="ghost-button" type="button" onClick={downloadPdf}>{t("ui.downloadPdf")}</button>
-              <button className="ghost-button" type="button" onClick={sharePlan}>{t("ui.share")}</button>
             </div>
           </div>
         ) : null}
