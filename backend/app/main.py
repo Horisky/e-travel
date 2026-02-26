@@ -228,41 +228,26 @@ async def update_preferences(req: PreferencesRequest, user: dict = Depends(curre
 
 @app.post('/api/plan', response_model=PlanResponse)
 async def plan(req: PlanRequest, user: dict | None = Depends(optional_user_dep)):
-    if not user:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    user_id = str(user["id"])
-    now = datetime.now(timezone.utc)
-    week_start = (now - timedelta(days=now.weekday())).date().isoformat()
-    plan_type = await db.get_subscription_plan(user_id)
-    if plan_type == "pro":
-        used = await db.get_weekly_usage(user_id, week_start)
-        if used >= 20:
-            raise HTTPException(status_code=429, detail="Weekly quota exceeded")
-    else:
-        total_used = await db.get_total_usage(user_id)
-        if total_used >= 1:
-            raise HTTPException(status_code=429, detail="Free trial used")
     try:
-        result = await generate_plan_with_llm(req, user_id=user_id)
+        result = await generate_plan_with_llm(req, user_id=(str(user["id"]) if user else None))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    prefs = {
-        "origin": req.origin,
-        "destination": req.destination,
-        "travelers": req.travelers,
-        "budget_min": req.budget_min,
-        "budget_max": req.budget_max,
-        "budget_text": req.budget_text,
-        "preferences": req.preferences,
-        "pace": req.pace,
-        "constraints": req.constraints,
-    }
-    await db.save_preferences(user_id, prefs)
-    await db.save_plan(user_id, result.model_dump())
-    await db.save_search_history(user_id, req.model_dump(), result.model_dump())
-    await save_user_memory_from_plan(user_id, req.model_dump(), result.model_dump())
-    await db.increment_weekly_usage(user_id, week_start)
+    if user:
+        prefs = {
+            "origin": req.origin,
+            "destination": req.destination,
+            "travelers": req.travelers,
+            "budget_min": req.budget_min,
+            "budget_max": req.budget_max,
+            "budget_text": req.budget_text,
+            "preferences": req.preferences,
+            "pace": req.pace,
+            "constraints": req.constraints,
+        }
+        await db.save_preferences(user["id"], prefs)
+        await db.save_plan(user["id"], result.model_dump())
+        await db.save_search_history(user["id"], req.model_dump(), result.model_dump())
+        await save_user_memory_from_plan(str(user["id"]), req.model_dump(), result.model_dump())
 
     return result
