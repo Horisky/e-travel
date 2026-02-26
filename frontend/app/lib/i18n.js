@@ -25,6 +25,12 @@ export const messages = {
     "ui.unknownTime": "未知时间",
     "ui.delete": "删除",
     "ui.deleteConfirm": "确认删除此条历史记录？删除后不可恢复。",
+    "ui.downloadPdf": "下载 PDF",
+    "ui.share": "分享",
+    "ui.shareCopied": "已复制分享内容",
+    "ui.shareFailed": "分享失败，请重试",
+    "ui.printToPdf": "使用浏览器打印可保存为 PDF",
+
     "landing.title": "一键生成你的专属旅行计划",
     "landing.subtitle": "输入出发地、预算和偏好，立刻得到 Top 3 目的地推荐与逐日行程安排。",
     "landing.cta": "开始计划你的旅行",
@@ -57,6 +63,8 @@ export const messages = {
     "planner.result": "行程结果",
     "planner.topDestinations": "Top 推荐目的地",
     "planner.dailyPlan": "每日行程",
+    "planner.summary": "行程摘要",
+
     "planner.budget": "预算明细",
     "planner.warnings": "注意事项",
     "planner.origin": "出发城市 *",
@@ -109,6 +117,12 @@ export const messages = {
     "ui.unknownTime": "Unknown time",
     "ui.delete": "Delete",
     "ui.deleteConfirm": "Delete this item? This action cannot be undone.",
+    "ui.downloadPdf": "Download PDF",
+    "ui.share": "Share",
+    "ui.shareCopied": "Share text copied",
+    "ui.shareFailed": "Share failed. Please try again.",
+    "ui.printToPdf": "Use the browser print dialog to save as PDF.",
+
     "landing.title": "Generate your personalized travel plan instantly",
     "landing.subtitle": "Enter origin, budget, and preferences to get Top 3 destinations and a day-by-day plan.",
     "landing.cta": "Start planning",
@@ -141,6 +155,8 @@ export const messages = {
     "planner.result": "Plan result",
     "planner.topDestinations": "Top destinations",
     "planner.dailyPlan": "Daily plan",
+    "planner.summary": "Summary",
+
     "planner.budget": "Budget breakdown",
     "planner.warnings": "Warnings",
     "planner.origin": "Origin *",

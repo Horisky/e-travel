@@ -188,6 +188,268 @@ export default function PlannerPage() {
     return date.toLocaleString(lang === "zh" ? "zh-CN" : "en-US");
   };
 
+  const buildExportTitle = () => {
+    const titleOrigin = origin || (lang === "zh" ? "出发地" : "Origin");
+    const titleDestination = activeDestination || destination || (lang === "zh" ? "目的地" : "Destination");
+    const dateLabel = startDate || (lang === "zh" ? "未填日期" : "No date");
+    const dayUnit = lang === "zh" ? "天" : "days";
+    const peopleUnit = lang === "zh" ? "人" : "people";
+    return `${titleOrigin} → ${titleDestination} (${dateLabel}, ${days || 0} ${dayUnit}, ${travelers || 1} ${peopleUnit})`;
+  };
+
+  const sanitizeFilename = (value) => {
+    if (!value) return "plan";
+    return value.replace(/[\\/:*?"<>|]/g, "-").replace(/\s+/g, " ").trim();
+  };
+
+  const buildExportText = () => {
+    if (!data) return "";
+    const lines = [];
+    lines.push(buildExportTitle());
+
+    if (data.summary) {
+      lines.push("");
+      lines.push(`${t("planner.summary")}: ${data.summary}`);
+    }
+
+    const topList = topDestinations.length ? topDestinations : data.top_destinations || [];
+    if (topList.length) {
+      lines.push("");
+      lines.push(t("planner.topDestinations"));
+      topList.forEach((item) => {
+        lines.push(`- ${item.name}: ${item.reasons.join("; ")} | ${t("planner.budget")}: ${item.budget_range}`);
+      });
+    }
+
+    lines.push("");
+    lines.push(t("planner.dailyPlan"));
+    (data.daily_plan || []).forEach((day) => {
+      lines.push(`${t("planner.day")} ${day.day}`);
+      [
+        { label: lang === "zh" ? "涓婂崍" : "Morning", block: day.morning },
+        { label: lang === "zh" ? "涓嬪崍" : "Afternoon", block: day.afternoon },
+        { label: lang === "zh" ? "鏅氫笂" : "Evening", block: day.evening }
+      ].forEach((segment) => {
+        lines.push(`  ${segment.label}: ${segment.block.title}`);
+        lines.push(`  ${t("planner.transport")}: ${segment.block.transport}`);
+        lines.push(`  ${t("planner.duration")}: ${segment.block.duration_hours} ${lang === "zh" ? "灏忔椂" : "hrs"}`);
+        lines.push(`  ${t("planner.cost")}: ${segment.block.cost_range}`);
+        if (segment.block.alternatives?.length) {
+          lines.push(`  ${t("planner.alt")}: ${segment.block.alternatives.join(" / ")}`);
+        }
+      });
+    });
+
+    lines.push("");
+    lines.push(t("planner.budget"));
+    if (data.budget_breakdown) {
+      lines.push(`${lang === "zh" ? "浜ら€?" : "Transport"}: ${data.budget_breakdown.transport}`);
+      lines.push(`${lang === "zh" ? "浣忓" : "Lodging"}: ${data.budget_breakdown.lodging}`);
+      lines.push(`${lang === "zh" ? "椁愰ギ" : "Food"}: ${data.budget_breakdown.food}`);
+      lines.push(`${lang === "zh" ? "闂ㄧエ" : "Tickets"}: ${data.budget_breakdown.tickets}`);
+      lines.push(`${lang === "zh" ? "甯傚唴浜ら€?" : "Local transport"}: ${data.budget_breakdown.local_transport}`);
+    }
+
+    if (data.warnings?.length) {
+      lines.push("");
+      lines.push(t("planner.warnings"));
+      data.warnings.forEach((warn) => lines.push(`- ${warn}`));
+    }
+
+    return lines.join("\n");
+  };
+
+  const buildExportHtml = () => {
+    if (!data) return "";
+    const title = buildExportTitle();
+    const siteName = "E-Travel";
+    const summary = data.summary ? `<div class="summary">${data.summary}</div>` : "";
+    const topList = (topDestinations.length ? topDestinations : data.top_destinations || [])
+      .map((item) => `
+        <div class="card">
+          <h4>${item.name}</h4>
+          <ul>${item.reasons.map((reason) => `<li>${reason}</li>`).join("")}</ul>
+          <p class="meta">${lang === "zh" ? "预算：" : "Budget: "}${item.budget_range}</p>
+          <p class="meta">${lang === "zh" ? "交通：" : "Transport: "}${item.transport}</p>
+          <p class="meta">${lang === "zh" ? "最佳季节：" : "Best season: "}${item.best_season}</p>
+        </div>
+      `).join("");
+
+    const dayBlocks = (data.daily_plan || [])
+      .map((day) => {
+        const segments = [
+          { label: lang === "zh" ? "上午" : "Morning", block: day.morning },
+          { label: lang === "zh" ? "下午" : "Afternoon", block: day.afternoon },
+          { label: lang === "zh" ? "晚上" : "Evening", block: day.evening }
+        ].map((segment) => `
+          <div class="segment">
+            <div class="segment-title">
+              <span>${segment.label}</span>
+              <strong>${segment.block.title}</strong>
+            </div>
+            <p>${t("planner.transport")}: ${segment.block.transport}</p>
+            <p>${t("planner.duration")}: ${segment.block.duration_hours} ${lang === "zh" ? "小时" : "hrs"}</p>
+            <p>${t("planner.cost")}: ${segment.block.cost_range}</p>
+            ${segment.block.alternatives?.length ? `<p class="alt">${t("planner.alt")}: ${segment.block.alternatives.join(" / ")}</p>` : ""}
+          </div>
+        `).join("");
+
+        return `
+          <div class="day-card">
+            <h4>${t("planner.day")} ${day.day}</h4>
+            ${segments}
+          </div>
+        `;
+      })
+      .join("");
+
+    const warnings = data.warnings?.length
+      ? `<ul class="warnings">${data.warnings.map((warn) => `<li>${warn}</li>`).join("")}</ul>`
+      : "";
+
+    return `<!DOCTYPE html>
+<html lang="${lang === "zh" ? "zh-CN" : "en"}">
+  <head>
+    <meta charset="UTF-8" />
+    <title>${title}</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f5efe7;
+        --surface: #ffffff;
+        --ink: #1a1a1a;
+        --muted: #5b4f45;
+        --accent: #b84d2e;
+        --accent-2: #2f6f6c;
+        --border: rgba(26, 26, 26, 0.1);
+        --shadow: 0 18px 36px rgba(26, 26, 26, 0.12);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 32px;
+        background: radial-gradient(circle at top left, #ffe5d4 0%, #f5efe7 45%, #e2efe8 100%);
+        color: var(--ink);
+        font-family: "Space Grotesk", "Segoe UI", Arial, sans-serif;
+      }
+      .export-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: #ffffff;
+        box-shadow: var(--shadow);
+        margin-bottom: 18px;
+      }
+      .export-brand {
+        display: grid;
+        gap: 2px;
+      }
+      .export-brand strong {
+        font-size: 14px;
+      }
+      .export-brand span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      h1 { font-size: 22px; margin: 0 0 16px; }
+      h2 { font-size: 16px; margin: 24px 0 12px; }
+      .summary { background: #fff8f1; border: 1px solid var(--border); padding: 14px; border-radius: 14px; }
+      .cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+      .card { background: #fff8f1; border-radius: 16px; padding: 14px; border: 1px solid var(--border); }
+      .card h4 { margin: 0 0 8px; }
+      .card ul { margin: 0 0 8px; padding-left: 18px; color: var(--muted); }
+      .meta { margin: 2px 0; font-size: 12px; color: var(--muted); }
+      .day-grid { display: grid; gap: 12px; }
+      .day-card { background: #fefcf9; border-radius: 16px; padding: 14px; border: 1px solid var(--border); }
+      .segment { border-top: 1px dashed var(--border); padding-top: 10px; margin-top: 10px; }
+      .segment-title { display: flex; justify-content: space-between; gap: 12px; }
+      .segment-title span { color: var(--muted); font-size: 12px; }
+      .segment p { margin: 4px 0; font-size: 13px; }
+      .alt { color: var(--muted); font-size: 12px; }
+      .budget-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+      .budget-grid div { background: #f7efe3; border-radius: 14px; padding: 12px; border: 1px solid var(--border); display: grid; gap: 4px; }
+      .budget-grid span { color: var(--muted); font-size: 12px; }
+      .warnings { padding-left: 18px; color: var(--muted); }
+      .note { margin-top: 16px; font-size: 12px; color: var(--muted); }
+      @media print {
+        body {
+          background: #ffffff;
+          -webkit-print-color-adjust: exact;
+          print-color-adjust: exact;
+        }
+        .note { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="export-header">
+      <div class="export-brand">
+        <strong>${siteName}</strong>
+        <span>${lang === "zh" ? "AI 旅行规划" : "AI travel planning"}</span>
+      </div>
+      <div class="export-brand">
+        <strong>${lang === "zh" ? "行程导出" : "Plan Export"}</strong>
+        <span>${new Date().toLocaleString(lang === "zh" ? "zh-CN" : "en-US")}</span>
+      </div>
+    </div>
+    <h1>${title}</h1>
+    ${summary}
+
+    <h2>${t("planner.topDestinations")}</h2>
+    <div class="cards">${topList || ""}</div>
+
+    <h2>${t("planner.dailyPlan")}</h2>
+    <div class="day-grid">${dayBlocks}</div>
+
+    <h2>${t("planner.budget")}</h2>
+    <div class="budget-grid">
+      <div><span>${lang === "zh" ? "交通" : "Transport"}</span><strong>${data.budget_breakdown.transport}</strong></div>
+      <div><span>${lang === "zh" ? "住宿" : "Lodging"}</span><strong>${data.budget_breakdown.lodging}</strong></div>
+      <div><span>${lang === "zh" ? "餐饮" : "Food"}</span><strong>${data.budget_breakdown.food}</strong></div>
+      <div><span>${lang === "zh" ? "门票" : "Tickets"}</span><strong>${data.budget_breakdown.tickets}</strong></div>
+      <div><span>${lang === "zh" ? "市内交通" : "Local transport"}</span><strong>${data.budget_breakdown.local_transport}</strong></div>
+    </div>
+
+    ${warnings ? `<h2>${t("planner.warnings")}</h2>${warnings}` : ""}
+    <div class="note">${t("ui.printToPdf")}</div>
+  </body>
+</html>`;
+  };
+
+  const downloadPdf = () => {
+    if (!data) return;
+    const html = buildExportHtml();
+    const win = window.open("", "_blank");
+    if (!win) {
+      alert(t("ui.shareFailed"));
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 400);
+  };
+
+  const sharePlan = async () => {
+    if (!data) return;
+    const text = buildExportText();
+    const title = buildExportTitle();
+    try {
+      if (navigator.share) {
+        await navigator.share({ title, text });
+        return;
+      }
+      await navigator.clipboard.writeText(`${title}\n\n${text}`);
+      alert(t("ui.shareCopied"));
+    } catch (e) {
+      alert(t("ui.shareFailed"));
+    }
+  };
+
   const generatePlan = async (forcedDestination) => {
     if (loading) return;
     setError("");
@@ -272,6 +534,10 @@ export default function PlannerPage() {
               {t("ui.back")}
             </button>
             <button className="ghost-button" type="button" onClick={() => { setShowForm(true); window.scrollTo({ top: 0, behavior: "smooth" }); }}>{t("ui.edit")}</button>
+            <div className="result-tools">
+              <button className="ghost-button" type="button" onClick={downloadPdf}>{t("ui.downloadPdf")}</button>
+              <button className="ghost-button" type="button" onClick={sharePlan}>{t("ui.share")}</button>
+            </div>
           </div>
         ) : null}
       </div>
