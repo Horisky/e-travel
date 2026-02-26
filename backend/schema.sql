@@ -85,3 +85,19 @@ create table if not exists user_memory_docs (
   embedding vector(1536) not null,
   created_at timestamptz not null default now()
 );
+
+create table if not exists user_subscriptions (
+  user_id uuid primary key references users(id) on delete cascade,
+  plan text not null default 'free',
+  period_start date,
+  period_end date,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists user_usage (
+  user_id uuid not null references users(id) on delete cascade,
+  week_start date not null,
+  count int not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, week_start)
+);
