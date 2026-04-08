@@ -62,6 +62,7 @@ def get_settings() -> Settings:
             "http://127.0.0.1:3000",
             "https://e-travel-murex.vercel.app",
             "https://e-travel-s5rj.vercel.app",
+            "https://app.aivault.asia",
             *extra_origins,
         ],
         send_code_in_response=_env_bool("SEND_CODE_IN_RESPONSE", "true"),
